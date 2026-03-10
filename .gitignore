@@ -1,0 +1,32 @@
+# Node
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Sensitive bank export files — never commit real financial data
+skills/Resources/BankExport/*.xlsx
+skills/Resources/BankExport/*.xls
+skills/Resources/BankExport/*.csv
