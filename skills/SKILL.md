@@ -41,6 +41,7 @@ A companion PWA (separate repository) provides mobile access to a subset of feat
 │   └── Reports
 └── Configuration
     ├── User Profiles
+    ├── DietPlanner Settings
     ├── Banks
     ├── File Formats
     └── Category Mapping
@@ -67,6 +68,7 @@ A companion PWA (separate repository) provides mobile access to a subset of feat
 | Backend        | FastAPI (Python) — single shared API    |
 | API Docs       | Swagger / OpenAPI                       |
 | Database       | PostgreSQL                              |
+| Claude AI      | Anthropic API — claude-haiku-3-5        |
 | Infrastructure | Docker Compose on Windows Server        |
 
 ### Mobile PWA

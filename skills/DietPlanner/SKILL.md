@@ -1,9 +1,9 @@
 ---
 name: diet-planner
 description: >
-  Use this skill to manage diet plans, recipes, ingredients, and grocery lists.
+  Use this skill to manage diet plans, dishes, ingredients, and grocery lists.
   Triggers for meal planning, Kcal calculation, macro tracking, weight/body fat
-  logging, or weekly plan generation.
+  logging, weekly plan generation, or AI-assisted macronutrient lookup.
 ---
 
 # DietPlanner
@@ -23,14 +23,103 @@ body fat % tracking, recalculating the plan weekly based on the user's progress.
 - Printable view
 
 ### Meals
-- Daily meal plan: N configurable slots (breakfast, lunch, dinner, snacks…)
-- Recipe assignment per meal slot
-- Kcal and macro summary per meal and per day
-- Weekly plan overview
+Manage the dish library used to compose the weekly meal plan.
+
+  Dish fields:
+  - Name *
+  - Dish type *             (Primary Dish / Secondary Dish / Side)
+  - Max times/week          (integer, e.g. 2)
+  - User                    (Global = all profiles / specific profile)
+  - Meal slots              (multi-checkbox: Colazione, Spuntino, Pranzo, Cena)
+  - Variable proportions    (bool — if true, the auto-plan engine can rebalance
+                             ingredient quantities within this dish to hit macro
+                             targets; engine implementation is pending)
+  - Day preference          (multi-select pills: Mon Tue Wed Thu Fri Sat Sun)
+  - Preparation             (textarea)
+  - Ingredients             (search + add from ingredient library)
+
+  Ingredient search in Dish:
+  - Type to search existing ingredients in DB
+  - If not found → "Search with AI" button (Claude AI macro lookup)
 
 ### Ingredients
-- Master ingredient library (fully manual entry)
-- Fields: name, unit, proteins (g), carbohydrates (g), fats (g), Kcal/100g
+Master ingredient library.
+
+  Ingredient fields:
+  - Name *
+  - Kcal / 100g
+  - Unit of measure         (dropdown: g, ml, …)
+  - Proteins / 100g
+  - Carbohydrates / 100g
+  - Fats / 100g
+  - Seasonality             (months available: Jan–Dec, multi-checkbox,
+                             all checked by default)
+
+  If ingredient not found → "Search with AI" button (Claude AI macro lookup)
+
+## Claude AI — Macronutrient Lookup
+When an ingredient is not found in the database, the user can trigger an
+AI-assisted lookup powered by the Anthropic API.
+
+  Model  : claude-haiku-3-5
+  Config : ANTHROPIC_API_KEY from .env (never committed to git)
+
+  Flow:
+  1. User searches ingredient → not found in DB
+  2. User clicks "Search with AI"
+  3. Backend calls Anthropic API with ingredient name
+  4. Claude returns estimated: Kcal/100g, Proteins, Carbs, Fats, Unit
+  5. Results shown in editable form for user review / correction
+  6. User confirms → ingredient saved to DB
+  7. Feature available in: Ingredients page + Dish ingredient search
+
+  .env example:
+    ANTHROPIC_API_KEY=sk-ant-...   # never commit this file
+
+## Auto Weekly Plan Generator Algorithm
+Generates a full weekly meal plan for a profile respecting caloric and
+per-slot macro targets. Configured via DietPlanner Settings (Configuration menu).
+
+  Config:
+    N = max rebalance iterations (from DietPlanner Settings, default = 3)
+
+  FOR each week_day (Mon → Sun):
+    FOR each meal_slot (breakfast, morning_snack, lunch, afternoon_snack, dinner):
+
+      Step 1 — Filter Primary Dishes
+        SELECT dishes WHERE dish_type = 'Primary'
+                        AND meal_slots ∋ current_slot
+
+      Step 2 — Apply day_preferences
+        Prefer dishes whose day_preferences include current week_day
+
+      Step 3 — Apply max_per_week
+        Exclude dishes already used max_per_week times this week
+
+      Step 4 — Random selection
+        Pick randomly from filtered list
+        Calculate total macronutrients of selected dish
+
+      Step 5 — Compare to ProfileGoalDist target for this slot
+        target = ProfileGoalDist WHERE slot_type = current_slot
+
+        IF actual macros ≠ target macros:
+
+          IF variable_portions = false:
+            a. Identify the macro with the largest gap (carbs / proteins / fats)
+            b. Find Secondary Dishes or Sides WHERE that macro is dominant
+               (dominant = macro providing the highest % of total calories)
+            c. Add Secondary/Side to the meal list
+            d. Rebalance PRIMARY dish portion size (total grams served)
+               — ingredient ratios inside the dish are NOT changed
+            e. Repeat steps b–d up to N iterations until targets are met
+
+          IF variable_portions = true:
+            a. Rebalance ingredient quantities within the dish
+               to hit the slot macro targets
+            b. Repeat up to N iterations
+
+  Output: DailyPlan entries for the full week
 
 ## Kcal Calculation
   Standard macro formula:
@@ -54,11 +143,13 @@ body fat % tracking, recalculating the plan weekly based on the user's progress.
 
 ## Features
 - Multi-profile: each profile has own goals, weight, body fat %
-- N configurable meals per day
-- Auto-generate weekly meal plan respecting caloric + macro targets
+- N configurable meals per day (set in Configuration → User Profiles)
+- Per-slot Kcal % and macro % distribution (set in Configuration → User Profiles)
+- Auto weekly meal plan generator with macro rebalancing algorithm
 - Weight and body fat % log (per day)
 - Weekly auto-recalculation of plan based on weight/fat trend
 - Grocery list auto-generated from weekly plan + manually editable
+- AI-assisted macronutrient lookup via Anthropic API (claude-haiku-3-5)
 
 ## Data Model (summary)
 - Profile
@@ -74,14 +165,30 @@ body fat % tracking, recalculating the plan weekly based on the user's progress.
     meal_dist_breakfast_pct, meal_dist_morning_snack_pct,
     meal_dist_lunch_pct, meal_dist_afternoon_snack_pct,
     meal_dist_dinner_pct,                       -- must sum to 100
-    macro_carbs_pct, macro_proteins_pct, macro_fats_pct  -- must sum to 100
+    macro_carbs_pct, macro_proteins_pct, macro_fats_pct  -- overall day, sum to 100
 
-- Ingredient      : id, name, unit, proteins_g, carbs_g, fats_g, kcal_per_100g
-- Recipe          : id, name, description, [RecipeIngredient]
-- RecipeIngredient: id, recipe_id, ingredient_id, quantity_g
-- MealPlan        : id, profile_id, week_start_date, [DailyPlan]
-- DailyPlan       : id, meal_plan_id, date, [Meal]
-- Meal            : id, daily_plan_id, slot, recipe_id, kcal, macros_json
-- WeightLog       : id, profile_id, date, weight_kg, body_fat_pct
-- GroceryList     : id, meal_plan_id, [GroceryItem]
-- GroceryItem     : id, grocery_list_id, ingredient_id, quantity_g, checked
+- ProfileGoalDist                               -- per-slot macro distribution
+    id, profilegoal_id,
+    slot_type,                                  -- breakfast/morning_snack/lunch/...
+    macro_carbs_pct, macro_proteins_pct, macro_fats_pct  -- must sum to 100 per row
+
+- Ingredient
+    id, name, unit, kcal_per_100g, proteins_g, carbs_g, fats_g,
+    seasonality_months[]                        -- e.g. [1,2,3,10,11,12]
+
+- Dish (Pasto)
+    id, name,
+    dish_type (primary/secondary/side),
+    max_per_week, profile_id (null = global),
+    meal_slots[],                               -- colazione/spuntino/pranzo/cena
+    variable_portions,                          -- bool (engine rebalances ingredients)
+    day_preferences[],                          -- mon/tue/…/sun
+    preparation
+
+- DishIngredient     : id, dish_id, ingredient_id, quantity_g
+- MealPlan           : id, profile_id, week_start_date, [DailyPlan]
+- DailyPlan          : id, meal_plan_id, date, [Meal]
+- Meal               : id, daily_plan_id, slot, dish_id, kcal, macros_json
+- WeightLog          : id, profile_id, date, weight_kg, body_fat_pct
+- GroceryList        : id, meal_plan_id, [GroceryItem]
+- GroceryItem        : id, grocery_list_id, ingredient_id, quantity_g, checked

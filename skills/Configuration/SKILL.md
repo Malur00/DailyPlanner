@@ -2,8 +2,9 @@
 name: configuration
 description: >
   Use this skill for global application settings. Triggers when the user wants
-  to manage user profiles, configure banks, define file import formats, or
-  set up category mapping rules for transaction imports.
+  to manage user profiles, configure banks, define file import formats,
+  set up category mapping rules for transaction imports, or configure
+  DietPlanner algorithm settings.
 ---
 
 # Configuration
@@ -37,9 +38,24 @@ Manage multi-profile settings used by DietPlanner.
   - Carbohydrates, Proteins, Fats
   - Live validation: sum must equal 100%
 
+  Per-slot Macro Distribution (ProfileGoalDist):
+  - For each meal slot (Breakfast, Morning snack, Lunch, Afternoon snack, Dinner)
+    define an independent macro split: Carbohydrates %, Proteins %, Fats %
+  - Live validation: sum must equal 100% per slot
+  - Example: Breakfast = 70% carbs / 20% prot / 10% fat
+             Lunch     = 30% carbs / 50% prot / 20% fat
+
   Preview panel (real-time):
   - BMR, TDEE (Fabbisogno), Kcal target
   - Macros in grams: Carbo, Prot, Fats
+
+### DietPlanner Settings
+Algorithm parameters for the Auto Weekly Plan Generator.
+
+  - Max rebalance iterations (N) : integer, default = 3
+      Maximum number of iterations the algorithm runs when trying to
+      balance macronutrients for a meal slot (adding Secondary/Side dishes
+      or rebalancing portion sizes / ingredient quantities)
 
 ### Banks
 Manage bank accounts used for transaction import.
