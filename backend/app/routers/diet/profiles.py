@@ -16,13 +16,31 @@ router = APIRouter()
 # Profiles CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_model=list[ProfileResponse])
+@router.get(
+    "/",
+    response_model=list[ProfileResponse],
+    summary="List all profiles",
+)
 def list_profiles(db: Session = Depends(get_db)):
+    """Return all user profiles stored in the system (no pagination — expected to be a small set)."""
     return db.query(Profile).all()
 
 
-@router.post("/", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ProfileResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new profile",
+)
 def create_profile(data: ProfileCreate, db: Session = Depends(get_db)):
+    """
+    Create a user profile.
+
+    - **gender** + **weight_kg** + **height_cm** + **age** are used for BMR/TDEE computation.
+    - **activity_level** determines the TDEE multiplier (1.2 → 1.9).
+    - **goal** adjusts the daily Kcal target: weight_loss −500 kcal, maintenance 0, mass +300 kcal.
+    - **calc_formula**: `mifflin` = Mifflin-St Jeor (default), `harris` = Harris-Benedict.
+    """
     profile = Profile(**data.model_dump())
     db.add(profile)
     db.commit()
@@ -30,16 +48,30 @@ def create_profile(data: ProfileCreate, db: Session = Depends(get_db)):
     return profile
 
 
-@router.get("/{profile_id}", response_model=ProfileResponse)
+@router.get(
+    "/{profile_id}",
+    response_model=ProfileResponse,
+    summary="Get profile by ID",
+)
 def get_profile(profile_id: int, db: Session = Depends(get_db)):
+    """Retrieve a single profile. Returns 404 if not found."""
     profile = db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile
 
 
-@router.put("/{profile_id}", response_model=ProfileResponse)
+@router.put(
+    "/{profile_id}",
+    response_model=ProfileResponse,
+    summary="Update profile",
+)
 def update_profile(profile_id: int, data: ProfileUpdate, db: Session = Depends(get_db)):
+    """
+    Full replacement update of a profile (all fields required).
+    Changing **weight_kg**, **age**, or **activity_level** automatically affects
+    the computed BMR/TDEE returned by `GET /{id}/goal`.
+    """
     profile = db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -50,8 +82,16 @@ def update_profile(profile_id: int, data: ProfileUpdate, db: Session = Depends(g
     return profile
 
 
-@router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{profile_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete profile",
+)
 def delete_profile(profile_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a profile and all related data (cascade): ProfileGoal, ProfileGoalDist,
+    MealPlans, WeightLogs, and Dishes owned by this profile.
+    """
     profile = db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -63,8 +103,26 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)):
 # Profile Goal
 # ---------------------------------------------------------------------------
 
-@router.get("/{profile_id}/goal", response_model=ProfileGoalResponse)
+@router.get(
+    "/{profile_id}/goal",
+    response_model=ProfileGoalResponse,
+    summary="Get goal configuration (with computed BMR / TDEE / macros)",
+)
 def get_goal(profile_id: int, db: Session = Depends(get_db)):
+    """
+    Return the ProfileGoal for this profile together with server-side computed fields:
+
+    | Field | Description |
+    |---|---|
+    | **bmr** | Basal Metabolic Rate (kcal/day) — Mifflin-St Jeor or Harris-Benedict |
+    | **tdee** | Total Daily Energy Expenditure = BMR × activity multiplier |
+    | **kcal_target** | Daily Kcal target = TDEE + goal adjustment (−500 / 0 / +300) |
+    | **carbs_g** | Daily carbohydrates in grams |
+    | **proteins_g** | Daily proteins in grams |
+    | **fats_g** | Daily fats in grams |
+
+    Returns 404 if goal has not been configured yet.
+    """
     profile = db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -82,8 +140,23 @@ def get_goal(profile_id: int, db: Session = Depends(get_db)):
     return response
 
 
-@router.put("/{profile_id}/goal", response_model=ProfileGoalResponse)
+@router.put(
+    "/{profile_id}/goal",
+    response_model=ProfileGoalResponse,
+    summary="Create or update goal configuration (upsert)",
+)
 def upsert_goal(profile_id: int, data: ProfileGoalCreate, db: Session = Depends(get_db)):
+    """
+    Upsert the ProfileGoal for this profile.
+
+    - All **meal_dist_*_pct** fields must sum to **100**.
+    - All **macro_*_pct** fields must sum to **100**.
+    - The optional **distributions** list sets per-slot macro splits
+      (one entry per meal slot); each entry's macros must also sum to **100**.
+    - Existing distributions are fully replaced on every call.
+
+    Returns the saved goal with computed BMR/TDEE/macro grams.
+    """
     profile = db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")

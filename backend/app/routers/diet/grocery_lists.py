@@ -11,16 +11,36 @@ from app.schemas.diet import (
 router = APIRouter()
 
 
-@router.get("/{meal_plan_id}", response_model=GroceryListResponse)
+@router.get(
+    "/{meal_plan_id}",
+    response_model=GroceryListResponse,
+    summary="Get grocery list for a meal plan (includes all items)",
+)
 def get_grocery_list(meal_plan_id: int, db: Session = Depends(get_db)):
+    """
+    Return the GroceryList for the given MealPlan, including all items.
+
+    The list is **auto-generated** by the plan generator (`POST /meal-plans/generate`)
+    which aggregates ingredient quantities across all meals for the week.
+    Items can be added, updated, or removed manually using the sub-endpoints below.
+    """
     grocery = db.query(GroceryList).filter(GroceryList.meal_plan_id == meal_plan_id).first()
     if not grocery:
         raise HTTPException(status_code=404, detail="Grocery list not found")
     return grocery
 
 
-@router.post("/{meal_plan_id}/items", response_model=GroceryItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{meal_plan_id}/items",
+    response_model=GroceryItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Manually add an item to the grocery list",
+)
 def add_item(meal_plan_id: int, data: GroceryItemCreate, db: Session = Depends(get_db)):
+    """
+    Add a manual item to the grocery list (e.g. something not in the meal plan
+    but needed for the week, such as condiments or extras).
+    """
     grocery = db.query(GroceryList).filter(GroceryList.meal_plan_id == meal_plan_id).first()
     if not grocery:
         raise HTTPException(status_code=404, detail="Grocery list not found")
@@ -31,8 +51,13 @@ def add_item(meal_plan_id: int, data: GroceryItemCreate, db: Session = Depends(g
     return item
 
 
-@router.put("/{meal_plan_id}/items/{item_id}", response_model=GroceryItemResponse)
+@router.put(
+    "/{meal_plan_id}/items/{item_id}",
+    response_model=GroceryItemResponse,
+    summary="Update grocery item quantity",
+)
 def update_item(meal_plan_id: int, item_id: int, data: GroceryItemCreate, db: Session = Depends(get_db)):
+    """Update the ingredient or quantity of an existing grocery item."""
     item = db.get(GroceryItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -43,8 +68,13 @@ def update_item(meal_plan_id: int, item_id: int, data: GroceryItemCreate, db: Se
     return item
 
 
-@router.delete("/{meal_plan_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{meal_plan_id}/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove item from grocery list",
+)
 def delete_item(meal_plan_id: int, item_id: int, db: Session = Depends(get_db)):
+    """Remove a grocery item. Returns 404 if not found."""
     item = db.get(GroceryItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -52,8 +82,18 @@ def delete_item(meal_plan_id: int, item_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.patch("/{meal_plan_id}/items/{item_id}/check", response_model=GroceryItemResponse)
+@router.patch(
+    "/{meal_plan_id}/items/{item_id}/check",
+    response_model=GroceryItemResponse,
+    summary="Toggle checked state of a grocery item",
+)
 def toggle_check(meal_plan_id: int, item_id: int, data: GroceryItemCheckUpdate, db: Session = Depends(get_db)):
+    """
+    Set the **checked** flag on a grocery item (true = purchased, false = still needed).
+
+    Designed for the mobile PWA shopping-list view where users tick off items
+    as they add them to the cart.
+    """
     item = db.get(GroceryItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")

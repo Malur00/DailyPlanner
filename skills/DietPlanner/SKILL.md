@@ -192,3 +192,120 @@ per-slot macro targets. Configured via DietPlanner Settings (Configuration menu)
 - WeightLog          : id, profile_id, date, weight_kg, body_fat_pct
 - GroceryList        : id, meal_plan_id, [GroceryItem]
 - GroceryItem        : id, grocery_list_id, ingredient_id, quantity_g, checked
+
+## API Reference
+
+Base URL: `http://localhost:8000/api/diet`
+Swagger UI: `http://localhost:8000/docs`
+
+### Profiles  `/api/diet/profiles`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/`          | List all profiles |
+| POST   | `/`          | Create profile → 201 |
+| GET    | `/{id}`      | Get profile by ID |
+| PUT    | `/{id}`      | Update profile (full replace) |
+| DELETE | `/{id}`      | Delete profile + cascade |
+| GET    | `/{id}/goal` | Get goal config + computed BMR / TDEE / macro grams |
+| PUT    | `/{id}/goal` | Upsert goal config (replaces all distributions) |
+
+**Constraints:**
+- `meal_dist_breakfast_pct` + `meal_dist_morning_snack_pct` + `meal_dist_lunch_pct` + `meal_dist_afternoon_snack_pct` + `meal_dist_dinner_pct` must sum to **100**.
+- `macro_carbs_pct` + `macro_proteins_pct` + `macro_fats_pct` (overall day) must sum to **100**.
+- Each `ProfileGoalDist` row: per-slot macro percentages must also sum to **100**.
+- `activity_level` TDEE multipliers: sedentary=1.2, light=1.375, moderate=1.55, intense=1.725, very_intense=1.9.
+- `goal` Kcal adjustments: weight_loss=−500 kcal, maintenance=0, mass=+300 kcal.
+- Computed fields (bmr, tdee, kcal_target, carbs_g, proteins_g, fats_g) are returned by the server, never stored.
+
+---
+
+### Ingredients  `/api/diet/ingredients`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/`          | List (query: `search=`, `month=`) |
+| POST   | `/`          | Create ingredient → 201 |
+| GET    | `/{id}`      | Get ingredient |
+| PUT    | `/{id}`      | Update ingredient (full replace) |
+| DELETE | `/{id}`      | Delete ingredient |
+| POST   | `/ai-lookup` | Claude AI macro estimate — preview only, does NOT save |
+
+**Constraints:**
+- All macro values are expressed **per 100 g / 100 ml**.
+- `seasonality_months`: integer array 1–12; `null` = available all year.
+- `POST /ai-lookup` calls `claude-haiku-3-5` — requires `ANTHROPIC_API_KEY` in `.env`.
+  Result is a **preview only**: user must confirm then call `POST /` to persist.
+
+---
+
+### Dishes  `/api/diet/dishes`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/`                                  | List (query: `dish_type=`, `slot=`, `profile_id=`) |
+| POST   | `/`                                  | Create dish + optional ingredients → 201 |
+| GET    | `/{id}`                              | Get dish with ingredient list |
+| PUT    | `/{id}`                              | Update dish metadata (ingredients unchanged) |
+| DELETE | `/{id}`                              | Delete dish + DishIngredients (cascade) |
+| POST   | `/{id}/ingredients`                  | Add ingredient to dish → 201 |
+| DELETE | `/{id}/ingredients/{ingredient_id}`  | Remove ingredient from dish |
+
+**Constraints:**
+- `dish_type`: `primary` = main course (selected by generator); `secondary` = macro corrector; `side` = condiment/extra.
+- `variable_portions = false` (default): generator scales overall portion size — ingredient ratios are fixed.
+- `variable_portions = true`: generator scales individual ingredient quantities.
+- `profile_id = null` → global dish (available to all profiles).
+- Filtering by `profile_id` returns both profile-specific AND global dishes.
+- `PUT /{id}` does NOT update the ingredient list — use sub-endpoints for that.
+
+---
+
+### Meal Plans  `/api/diet/meal-plans`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/`          | List plans for a profile (query: `profile_id=` required) |
+| POST   | `/`          | Create empty plan → 201 |
+| GET    | `/{id}`      | Get full plan (7 days × 5 slots, nested dishes) |
+| DELETE | `/{id}`      | Delete plan + cascade (DailyPlans, Meals, GroceryList) |
+| POST   | `/generate`  | Auto-generate weekly plan + GroceryList → 201 |
+
+**Constraints:**
+- `week_start_date` should be a **Monday** (ISO 8601 date).
+- `POST /generate` requires: configured ProfileGoal, at least one ProfileGoalDist per slot, and at least one `primary` dish per slot.
+- GroceryList is **auto-created** by `/generate` — it aggregates ingredient quantities across all week meals.
+- Max rebalance iterations **N** is read from DietPlanner Settings (Configuration menu, default = 3).
+
+---
+
+### Weight Logs  `/api/diet/weight-logs`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/`     | List entries (query: `profile_id=` required, `from=`, `to=`) |
+| POST   | `/`     | Add weigh-in entry → 201 |
+| DELETE | `/{id}` | Delete entry |
+
+**Constraints:**
+- `profile_id` query param is **required**.
+- Results are returned ordered by `date` ascending.
+- `from` / `to` query params accept ISO 8601 date strings.
+- `body_fat_pct` is optional (0–100).
+
+---
+
+### Grocery Lists  `/api/diet/grocery-lists`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/{meal_plan_id}`                        | Get grocery list with all items |
+| POST   | `/{meal_plan_id}/items`                  | Manually add item → 201 |
+| PUT    | `/{meal_plan_id}/items/{item_id}`        | Update item quantity |
+| DELETE | `/{meal_plan_id}/items/{item_id}`        | Remove item |
+| PATCH  | `/{meal_plan_id}/items/{item_id}/check`  | Toggle checked state |
+
+**Constraints:**
+- One GroceryList per MealPlan (1 : 1 relationship).
+- `PATCH /check` body: `{ "checked": true | false }` — true = purchased, false = still needed.
+- Manual items can be added for extras not included in the meal plan (e.g. condiments).

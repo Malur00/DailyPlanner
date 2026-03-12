@@ -88,3 +88,29 @@ A companion PWA (separate repository) provides mobile access to a subset of feat
 - Light theme
 - Single shared API base for all modules
 - Language files: en, it
+
+## API
+
+| Setting | Value |
+|---------|-------|
+| Base URL (dev) | `http://localhost:8000` |
+| Swagger UI     | `http://localhost:8000/docs` |
+| OpenAPI JSON   | `http://localhost:8000/openapi.json` |
+| Health check   | `GET /health` |
+
+**Routing prefix per module:**
+| Module       | Prefix         | Status |
+|--------------|----------------|--------|
+| DietPlanner  | `/api/diet/*`  | Implemented |
+| GymPlanner   | `/api/gym/*`   | Not yet implemented — HTTP 501 |
+| SavingPlanner| `/api/saving/*`| Not yet implemented — HTTP 501 |
+
+**Global API rules:**
+- All responses use **JSON**.
+- Date fields use **ISO 8601** (e.g. `2025-06-02`).
+- Units: **metric** (kg, g, cm) — no imperial conversion.
+- No authentication headers required.
+- CORS: all origins allowed (development configuration).
+- Successful resource creation returns **HTTP 201**.
+- Missing resources return **HTTP 404**.
+- Validation errors return **HTTP 422** (Pydantic / FastAPI standard).
