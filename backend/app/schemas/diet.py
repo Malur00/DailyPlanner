@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date as _date
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -243,7 +243,7 @@ class MealResponse(MealBase):
 class DailyPlanResponse(BaseModel):
     id:          int
     meal_plan_id: int
-    date:        date
+    date:        _date
     meals:       list[MealResponse] = []
 
     class Config:
@@ -253,7 +253,7 @@ class DailyPlanResponse(BaseModel):
 class MealPlanResponse(BaseModel):
     id:              int
     profile_id:      int
-    week_start_date: date
+    week_start_date: _date
     daily_plans:     list[DailyPlanResponse] = []
 
     class Config:
@@ -262,12 +262,12 @@ class MealPlanResponse(BaseModel):
 
 class MealPlanCreate(BaseModel):
     profile_id:      int  = Field(..., description="FK to Profile — owner of this meal plan")
-    week_start_date: date = Field(..., description="Monday of the target week (ISO 8601 date, e.g. 2025-06-02)")
+    week_start_date: _date = Field(..., description="Monday of the target week (ISO 8601 date, e.g. 2025-06-02)")
 
 
 class GeneratePlanRequest(BaseModel):
     profile_id:      int  = Field(..., description="Profile to use for the automatic plan generation")
-    week_start_date: date = Field(..., description="Monday of the target week (ISO 8601 date) — a new MealPlan is created for that week")
+    week_start_date: _date = Field(..., description="Monday of the target week (ISO 8601 date) — a new MealPlan is created for that week")
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ class GeneratePlanRequest(BaseModel):
 
 class WeightLogCreate(BaseModel):
     profile_id:   int            = Field(..., description="FK to Profile")
-    date:         date           = Field(..., description="Date of the weigh-in (ISO 8601, e.g. 2025-06-02)")
+    date:         _date          = Field(..., description="Date of the weigh-in (ISO 8601, e.g. 2025-06-02)")
     weight_kg:    float          = Field(..., gt=0, description="Measured body weight in kg")
     body_fat_pct: Optional[float] = Field(None, ge=0, le=100, description="Measured body fat percentage (optional)")
 
