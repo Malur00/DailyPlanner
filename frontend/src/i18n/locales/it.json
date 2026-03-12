@@ -137,7 +137,10 @@
       "5": "Mag", "6": "Giu", "7": "Lug", "8": "Ago",
       "9": "Set", "10": "Ott", "11": "Nov", "12": "Dic"
     },
-    "filterByMonth": "Filtra per mese"
+    "filterByMonth": "Filtra per mese",
+    "notFound": "Nessun ingrediente trovato per \"{{name}}\".",
+    "aiSearching": "Ricerca con AI in corso...",
+    "aiPreviewNote": "Valori generati dall'AI — rivedi e modifica prima di salvare."
   },
   "meals": {
     "title": "Pasti",

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Container, Table, Button, Modal, Form, Row, Col,
-  Badge, Spinner, InputGroup,
+  Badge, Spinner, Alert,
 } from 'react-bootstrap'
 import { useTranslation } from 'react-i18next'
 import {
@@ -23,48 +23,52 @@ const defaultForm: IngredientCreate = {
 // ── Ingredient Modal ─────────────────────────────────────────────────────────
 
 function IngredientModal({
-  show, onHide, initial,
-}: { show: boolean; onHide: () => void; initial: Ingredient | null }) {
+  show, onHide, initial, aiPreFill,
+}: {
+  show: boolean
+  onHide: () => void
+  initial: Ingredient | null
+  aiPreFill?: IngredientCreate | null
+}) {
   const { t } = useTranslation()
   const create = useCreateIngredient()
   const update = useUpdateIngredient()
-  const aiLookup = useAiLookup()
 
-  const [form, setForm] = useState<IngredientCreate>(
-    initial
-      ? { name: initial.name, unit: initial.unit, kcal_per_100g: initial.kcal_per_100g,
-          proteins_g: initial.proteins_g, carbs_g: initial.carbs_g, fats_g: initial.fats_g,
-          seasonality_months: initial.seasonality_months ?? null }
-      : defaultForm
+  const initForm = (): IngredientCreate => {
+    if (aiPreFill && !initial) return { ...aiPreFill }
+    if (initial) return {
+      name: initial.name, unit: initial.unit,
+      kcal_per_100g: initial.kcal_per_100g, proteins_g: initial.proteins_g,
+      carbs_g: initial.carbs_g, fats_g: initial.fats_g,
+      seasonality_months: initial.seasonality_months ?? null,
+    }
+    return { ...defaultForm }
+  }
+
+  const [form, setForm] = useState<IngredientCreate>(initForm)
+  const [allYear, setAllYear] = useState(
+    aiPreFill ? !aiPreFill.seasonality_months : !initial?.seasonality_months
   )
-  const [aiName, setAiName] = useState('')
-  const [showAi, setShowAi] = useState(false)
-  const [allYear, setAllYear] = useState(!initial?.seasonality_months)
+
+  // Sync when aiPreFill arrives (async AI call completes after modal opens)
+  useEffect(() => {
+    if (aiPreFill && !initial) {
+      setForm({ ...aiPreFill })
+      setAllYear(!aiPreFill.seasonality_months)
+    }
+  }, [aiPreFill, initial])
 
   const set = (field: keyof IngredientCreate, value: unknown) =>
     setForm(prev => ({ ...prev, [field]: value }))
 
-  const handleAiLookup = async () => {
-    const result = await aiLookup.mutateAsync(aiName || form.name)
-    setForm(prev => ({
-      ...prev,
-      name: result.name,
-      unit: result.unit,
-      kcal_per_100g: result.kcal_per_100g,
-      proteins_g: result.proteins_g,
-      carbs_g: result.carbs_g,
-      fats_g: result.fats_g,
-    }))
-    setShowAi(false)
-  }
-
   const toggleMonth = (m: number) => {
     const current = form.seasonality_months ?? []
-    if (current.includes(m)) {
-      set('seasonality_months', current.filter(x => x !== m))
-    } else {
-      set('seasonality_months', [...current, m].sort((a, b) => a - b))
-    }
+    set(
+      'seasonality_months',
+      current.includes(m)
+        ? current.filter(x => x !== m)
+        : [...current, m].sort((a, b) => a - b)
+    )
   }
 
   const handleSubmit = async () => {
@@ -79,52 +83,34 @@ function IngredientModal({
 
   const isPending = create.isPending || update.isPending
   const error = create.error || update.error
+  const isAiFilled = !!aiPreFill && !initial
 
   return (
     <Modal show={show} onHide={onHide} size="lg" centered>
       <Modal.Header closeButton>
-        <Modal.Title>{initial ? t('ingredients.editIngredient') : t('ingredients.newIngredient')}</Modal.Title>
+        <Modal.Title>
+          {initial ? t('ingredients.editIngredient') : t('ingredients.newIngredient')}
+          {isAiFilled && <Badge bg="info" className="ms-2">AI</Badge>}
+        </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <ErrorAlert error={error} />}
 
-        {/* AI Lookup sub-section */}
-        <div className="border rounded p-3 mb-3 bg-light">
-          <div className="d-flex align-items-center justify-content-between mb-2">
-            <strong className="small">{t('ingredients.aiLookupTitle')}</strong>
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowAi(!showAi)}>
-              {t('ingredients.aiLookup')}
-            </Button>
-          </div>
-          {showAi && (
-            <>
-              <p className="text-muted small mb-2">{t('ingredients.aiLookupDescription')}</p>
-              <InputGroup size="sm">
-                <Form.Control
-                  placeholder={form.name || t('ingredients.aiLookupIngredientName')}
-                  value={aiName}
-                  onChange={e => setAiName(e.target.value)}
-                />
-                <Button
-                  variant="primary"
-                  onClick={handleAiLookup}
-                  disabled={aiLookup.isPending}
-                >
-                  {aiLookup.isPending
-                    ? <Spinner size="sm" animation="border" />
-                    : t('ingredients.aiLookupSearch')}
-                </Button>
-              </InputGroup>
-              {aiLookup.error && <ErrorAlert error={aiLookup.error} />}
-            </>
-          )}
-        </div>
+        {isAiFilled && (
+          <Alert variant="info" className="py-2 small mb-3">
+            🤖 {t('ingredients.aiPreviewNote')}
+          </Alert>
+        )}
 
         <Row className="g-3">
           <Col md={6}>
             <Form.Group>
               <Form.Label>{t('ingredients.name')} *</Form.Label>
-              <Form.Control value={form.name} onChange={e => set('name', e.target.value)} />
+              <Form.Control
+                value={form.name}
+                onChange={e => set('name', e.target.value)}
+                autoFocus={!isAiFilled}
+              />
             </Form.Group>
           </Col>
           <Col md={3}>
@@ -136,29 +122,41 @@ function IngredientModal({
           <Col md={3}>
             <Form.Group>
               <Form.Label>{t('ingredients.kcalPer100g')}</Form.Label>
-              <Form.Control type="number" step="0.1" min={0} value={form.kcal_per_100g}
-                onChange={e => set('kcal_per_100g', Number(e.target.value))} />
+              <Form.Control
+                type="number" step="0.1" min={0}
+                value={form.kcal_per_100g}
+                onChange={e => set('kcal_per_100g', Number(e.target.value))}
+              />
             </Form.Group>
           </Col>
           <Col md={4}>
             <Form.Group>
               <Form.Label>{t('ingredients.proteinsPer100g')}</Form.Label>
-              <Form.Control type="number" step="0.1" min={0} value={form.proteins_g}
-                onChange={e => set('proteins_g', Number(e.target.value))} />
+              <Form.Control
+                type="number" step="0.1" min={0}
+                value={form.proteins_g}
+                onChange={e => set('proteins_g', Number(e.target.value))}
+              />
             </Form.Group>
           </Col>
           <Col md={4}>
             <Form.Group>
               <Form.Label>{t('ingredients.carbsPer100g')}</Form.Label>
-              <Form.Control type="number" step="0.1" min={0} value={form.carbs_g}
-                onChange={e => set('carbs_g', Number(e.target.value))} />
+              <Form.Control
+                type="number" step="0.1" min={0}
+                value={form.carbs_g}
+                onChange={e => set('carbs_g', Number(e.target.value))}
+              />
             </Form.Group>
           </Col>
           <Col md={4}>
             <Form.Group>
               <Form.Label>{t('ingredients.fatsPer100g')}</Form.Label>
-              <Form.Control type="number" step="0.1" min={0} value={form.fats_g}
-                onChange={e => set('fats_g', Number(e.target.value))} />
+              <Form.Control
+                type="number" step="0.1" min={0}
+                value={form.fats_g}
+                onChange={e => set('fats_g', Number(e.target.value))}
+              />
             </Form.Group>
           </Col>
           <Col md={12}>
@@ -178,10 +176,7 @@ function IngredientModal({
               <div className="d-flex flex-wrap gap-1">
                 {MONTHS.map(m => (
                   <Form.Check
-                    key={m}
-                    inline
-                    type="checkbox"
-                    id={`month-${m}`}
+                    key={m} inline type="checkbox" id={`month-${m}`}
                     label={t(`ingredients.months.${m}`)}
                     checked={form.seasonality_months?.includes(m) ?? false}
                     onChange={() => toggleMonth(m)}
@@ -211,7 +206,7 @@ export default function IngredientsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [month, setMonth] = useState<number | undefined>(undefined)
 
-  // Debounce search
+  // 300 ms debounce → avoids an API call on every keystroke
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(timer)
@@ -219,13 +214,29 @@ export default function IngredientsPage() {
 
   const { data: ingredients = [], isLoading, error } = useIngredients(debouncedSearch, month)
   const deleteIngredient = useDeleteIngredient()
+  const aiLookup = useAiLookup()
 
-  const [showModal, setShowModal] = useState(false)
-  const [editTarget, setEditTarget] = useState<Ingredient | null>(null)
+  const [showModal, setShowModal]     = useState(false)
+  const [editTarget, setEditTarget]   = useState<Ingredient | null>(null)
+  const [aiPreFill, setAiPreFill]     = useState<IngredientCreate | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null)
 
-  const openCreate = () => { setEditTarget(null); setShowModal(true) }
-  const openEdit = (ing: Ingredient) => { setEditTarget(ing); setShowModal(true) }
+  const openCreate = () => { setAiPreFill(null); setEditTarget(null); setShowModal(true) }
+  const openEdit   = (ing: Ingredient) => { setAiPreFill(null); setEditTarget(ing); setShowModal(true) }
+
+  // AI Search: called when user clicks "Search with AI" in the empty-state CTA
+  const handleAiSearch = async () => {
+    const result = await aiLookup.mutateAsync(debouncedSearch || search)
+    const filled: IngredientCreate = {
+      name: result.name, unit: result.unit,
+      kcal_per_100g: result.kcal_per_100g, proteins_g: result.proteins_g,
+      carbs_g: result.carbs_g, fats_g: result.fats_g,
+      seasonality_months: null,
+    }
+    setAiPreFill(filled)
+    setEditTarget(null)
+    setShowModal(true)
+  }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -233,16 +244,20 @@ export default function IngredientsPage() {
     setDeleteTarget(null)
   }
 
+  // Show the AI CTA only when search is active and returned 0 results
+  const showAiCta = debouncedSearch.trim() !== '' && !isLoading && !error && ingredients.length === 0
+
   return (
     <Container fluid>
+      {/* Header */}
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h4 className="mb-0">{t('ingredients.title')}</h4>
         <Button variant="primary" size="sm" onClick={openCreate}>
-          {t('ingredients.newIngredient')}
+          + {t('ingredients.newIngredient')}
         </Button>
       </div>
 
-      {/* Filters */}
+      {/* Search + month filter */}
       <Row className="g-2 mb-3">
         <Col md={5}>
           <Form.Control
@@ -252,7 +267,10 @@ export default function IngredientsPage() {
           />
         </Col>
         <Col md={3}>
-          <Form.Select value={month ?? ''} onChange={e => setMonth(e.target.value ? Number(e.target.value) : undefined)}>
+          <Form.Select
+            value={month ?? ''}
+            onChange={e => setMonth(e.target.value ? Number(e.target.value) : undefined)}
+          >
             <option value="">{t('ingredients.filterByMonth')}</option>
             {MONTHS.map(m => (
               <option key={m} value={m}>{t(`ingredients.months.${m}`)}</option>
@@ -262,9 +280,36 @@ export default function IngredientsPage() {
       </Row>
 
       {isLoading && <LoadingSpinner />}
-      {error && <ErrorAlert error={error} />}
+      {error   && <ErrorAlert error={error} />}
 
-      {!isLoading && !error && (
+      {/* ── Empty-state: "not found → Search with AI" CTA ── */}
+      {showAiCta && (
+        <div className="text-center py-5 border rounded bg-light">
+          <p className="text-muted mb-1">
+            {t('ingredients.notFound', { name: debouncedSearch })}
+          </p>
+          <p className="text-muted small mb-4">{t('ingredients.aiLookupDescription')}</p>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleAiSearch}
+            disabled={aiLookup.isPending}
+          >
+            {aiLookup.isPending
+              ? <><Spinner size="sm" animation="border" className="me-2" />{t('ingredients.aiSearching')}</>
+              : <>🤖 &nbsp;{t('ingredients.aiLookupSearch')}</>
+            }
+          </Button>
+          {aiLookup.error && (
+            <div className="mt-3 text-start">
+              <ErrorAlert error={aiLookup.error} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Results table ── */}
+      {!isLoading && !error && ingredients.length > 0 && (
         <Table striped hover responsive size="sm">
           <thead className="table-light">
             <tr>
@@ -279,9 +324,6 @@ export default function IngredientsPage() {
             </tr>
           </thead>
           <tbody>
-            {ingredients.length === 0 && (
-              <tr><td colSpan={8} className="text-center text-muted">{t('common.noData')}</td></tr>
-            )}
             {ingredients.map(ing => (
               <tr key={ing.id}>
                 <td>{ing.name}</td>
@@ -314,8 +356,18 @@ export default function IngredientsPage() {
         </Table>
       )}
 
+      {/* Empty with no active search */}
+      {!isLoading && !error && ingredients.length === 0 && debouncedSearch.trim() === '' && (
+        <p className="text-center text-muted py-4">{t('common.noData')}</p>
+      )}
+
       {showModal && (
-        <IngredientModal show={showModal} onHide={() => setShowModal(false)} initial={editTarget} />
+        <IngredientModal
+          show={showModal}
+          onHide={() => { setShowModal(false); setAiPreFill(null) }}
+          initial={editTarget}
+          aiPreFill={aiPreFill}
+        />
       )}
 
       <ConfirmModal

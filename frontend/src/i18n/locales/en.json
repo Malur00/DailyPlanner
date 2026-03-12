@@ -137,7 +137,10 @@
       "5": "May", "6": "Jun", "7": "Jul", "8": "Aug",
       "9": "Sep", "10": "Oct", "11": "Nov", "12": "Dec"
     },
-    "filterByMonth": "Filter by month"
+    "filterByMonth": "Filter by month",
+    "notFound": "No ingredient found for \"{{name}}\".",
+    "aiSearching": "Searching with AI...",
+    "aiPreviewNote": "AI-generated values — review and adjust before saving."
   },
   "meals": {
     "title": "Meals",
