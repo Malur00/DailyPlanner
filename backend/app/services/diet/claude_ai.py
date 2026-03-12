@@ -1,4 +1,4 @@
-"""Claude AI macronutrient lookup — uses claude-haiku-3-5."""
+"""Claude AI macronutrient lookup — uses claude-3-5-haiku."""
 
 import json
 
@@ -26,7 +26,7 @@ async def lookup_macros(ingredient_name: str) -> dict:
     # AsyncAnthropic — lazy init to avoid module-level side effects
     async with anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key) as client:
         message = await client.messages.create(
-            model="claude-haiku-3-5-20241022",
+            model="claude-3-5-haiku-20241022",
             max_tokens=256,
             messages=[
                 {
