@@ -41,9 +41,27 @@ Manage the dish library used to compose the weekly meal plan.
   Ingredient search in Dish:
   - Autocomplete dropdown: as the user types, up to 10 matching ingredients
     are fetched from the DB (client-side filter on cached list, case-insensitive)
+  - Dropdown opens upward (bottom: 100%) to avoid clipping at the bottom of
+    the scrollable modal
   - Selecting a suggestion fills the name field and enables the "Aggiungi" button
   - "Aggiungi" is disabled until a valid ingredient is selected from the dropdown
   - Already-added ingredients are excluded from suggestions
+  - When search text is non-empty and no DB results are found (and no ingredient
+    is currently selected), a `🤖 AI` button (outline-warning) appears inside
+    the search row. Clicking calls the AI lookup → creates the ingredient
+    automatically → selects it in the dish
+
+  Quick-create dish from single ingredient (button: "+ Da Ingrediente"):
+  - Dedicated modal for creating a dish composed of a single ingredient
+  - Fields: ingredient search + quantity (g) + meal slot selector (multi)
+  - Autocomplete dropdown opens upward (above input) to avoid modal clipping
+  - `🤖 AI` button always visible when search field is non-empty:
+      1. Calls AI lookup → shows preview card with estimated macros
+      2. User clicks "Crea Ingrediente e Usa" → ingredient saved to DB
+      3. Ingredient auto-selected; green Alert shows macro summary
+  - Save disabled until an ingredient is selected and at least one meal slot is chosen
+  - The dish library toolbar shows two buttons top-right:
+      "+ Da Ingrediente" (outline-primary) | "+ Nuovo Piatto" (primary)
 
 ### Ingredients
 Master ingredient library.
@@ -65,6 +83,26 @@ Master ingredient library.
   2. Modal button: a compact "🤖 AI" button sits next to the Name field.
      User types a name → clicks the button → macros are filled automatically.
   In both cases the result is shown in an editable form for review before saving.
+
+## Goal Configuration Modal
+Accessible via Configuration → User Profiles → "Configura Obiettivo".
+
+  Two tabs:
+  1. **Distribuzione Pasti (%)** — % of daily Kcal assigned to each meal slot
+     (Colazione, Spuntino Mattina, Pranzo, Merenda, Cena). Must sum to 100.
+  2. **Macronutrienti Giornalieri (%)** — Overall daily macro split
+     (Carboidrati, Proteine, Grassi). Must sum to 100. Applied uniformly to
+     every slot by the auto-plan generator.
+
+  Computed values panel (read-only, always visible below the tabs when goal
+  data is available, updated on each save):
+  - BMR (kcal/day), TDEE (kcal/day), Kcal Target
+  - Carbohydrates (g), Proteins (g), Fats (g)
+
+  Note: "Distribuzione Macro per Pasto" (per-slot macro splits) was removed.
+  The generator uses the same global macro % for every slot. The `ProfileGoalDist`
+  table still exists in the DB for backward compatibility but is no longer
+  populated or used.
 
 ## Claude AI — Macronutrient Lookup
 When an ingredient is not found in the database, the user can trigger an
@@ -89,7 +127,7 @@ AI-assisted lookup powered by the Anthropic API.
 
 ## Auto Weekly Plan Generator Algorithm
 Generates a full weekly meal plan for a profile respecting caloric and
-per-slot macro targets. Configured via DietPlanner Settings (Configuration menu).
+macro targets. Configured via DietPlanner Settings (Configuration menu).
 
   Config:
     N = max rebalance iterations (from DietPlanner Settings, default = 3)
@@ -111,8 +149,9 @@ per-slot macro targets. Configured via DietPlanner Settings (Configuration menu)
         Pick randomly from filtered list
         Calculate total macronutrients of selected dish
 
-      Step 5 — Compare to ProfileGoalDist target for this slot
-        target = ProfileGoalDist WHERE slot_type = current_slot
+      Step 5 — Compare to global macro target from ProfileGoal
+        target = { macro_carbs_pct, macro_proteins_pct, macro_fats_pct }
+                 from ProfileGoal — same target applied to every slot
 
         IF actual macros ≠ target macros:
 
@@ -127,7 +166,7 @@ per-slot macro targets. Configured via DietPlanner Settings (Configuration menu)
 
           IF variable_portions = true:
             a. Rebalance ingredient quantities within the dish
-               to hit the slot macro targets
+               to hit the macro targets
             b. Repeat up to N iterations
 
   Output: DailyPlan entries for the full week
@@ -148,14 +187,13 @@ per-slot macro targets. Configured via DietPlanner Settings (Configuration menu)
     Maintenance  → TDEE
     Mass gain    → TDEE + surplus
 
-  Preview panel shows in real-time:
-    MB (BMR), Fabbisogno (TDEE), Kcal target,
-    Macro validation (sum = 100%), Macros in grams
+  Computed values panel shows (read-only, updated on save):
+    BMR, TDEE, Kcal target, Macros in grams
 
 ## Features
 - Multi-profile: each profile has own goals, weight, body fat %
 - N configurable meals per day (set in Configuration → User Profiles)
-- Per-slot Kcal % and macro % distribution (set in Configuration → User Profiles)
+- Per-slot Kcal % distribution + global macro % (set in Configuration → User Profiles)
 - Auto weekly meal plan generator with macro rebalancing algorithm
 - Weight and body fat % log (per day)
 - Weekly auto-recalculation of plan based on weight/fat trend
@@ -178,10 +216,9 @@ per-slot macro targets. Configured via DietPlanner Settings (Configuration menu)
     meal_dist_dinner_pct,                       -- must sum to 100
     macro_carbs_pct, macro_proteins_pct, macro_fats_pct  -- overall day, sum to 100
 
-- ProfileGoalDist                               -- per-slot macro distribution
-    id, profilegoal_id,
-    slot_type,                                  -- breakfast/morning_snack/lunch/...
-    macro_carbs_pct, macro_proteins_pct, macro_fats_pct  -- must sum to 100 per row
+- ProfileGoalDist                               -- legacy: exists in DB, not used by UI/generator
+    id, profilegoal_id, slot_type,
+    macro_carbs_pct, macro_proteins_pct, macro_fats_pct
 
 - Ingredient
     id, name, unit, kcal_per_100g, proteins_g, carbs_g, fats_g,
@@ -222,9 +259,8 @@ Swagger UI: `http://localhost:8000/docs`
 | PUT    | `/{id}/goal` | Upsert goal config (replaces all distributions) |
 
 **Constraints:**
-- `meal_dist_breakfast_pct` + `meal_dist_morning_snack_pct` + `meal_dist_lunch_pct` + `meal_dist_afternoon_snack_pct` + `meal_dist_dinner_pct` must sum to **100**.
-- `macro_carbs_pct` + `macro_proteins_pct` + `macro_fats_pct` (overall day) must sum to **100**.
-- Each `ProfileGoalDist` row: per-slot macro percentages must also sum to **100**.
+- `meal_dist_*` fields must sum to **100**.
+- `macro_carbs_pct` + `macro_proteins_pct` + `macro_fats_pct` must sum to **100**.
 - `activity_level` TDEE multipliers: sedentary=1.2, light=1.375, moderate=1.55, intense=1.725, very_intense=1.9.
 - `goal` Kcal adjustments: weight_loss=−500 kcal, maintenance=0, mass=+300 kcal.
 - Computed fields (bmr, tdee, kcal_target, carbs_g, proteins_g, fats_g) are returned by the server, never stored.
@@ -245,7 +281,7 @@ Swagger UI: `http://localhost:8000/docs`
 **Constraints:**
 - All macro values are expressed **per 100 g / 100 ml**.
 - `seasonality_months`: integer array 1–12; `null` = available all year.
-- `POST /ai-lookup` calls `claude-haiku-3-5` — requires `ANTHROPIC_API_KEY` in `.env`.
+- `POST /ai-lookup` calls the configured Anthropic model — requires `ANTHROPIC_API_KEY` in `.env`.
   Result is a **preview only**: user must confirm then call `POST /` to persist.
 
 ---
@@ -284,7 +320,9 @@ Swagger UI: `http://localhost:8000/docs`
 
 **Constraints:**
 - `week_start_date` should be a **Monday** (ISO 8601 date).
-- `POST /generate` requires: configured ProfileGoal, at least one ProfileGoalDist per slot, and at least one `primary` dish per slot.
+- `POST /generate` requires: configured ProfileGoal (meal dist + macro % summing to 100)
+  and at least one `primary` dish per slot. Returns HTTP 422 with a descriptive message
+  if the profile has no goal configured.
 - GroceryList is **auto-created** by `/generate` — it aggregates ingredient quantities across all week meals.
 - Max rebalance iterations **N** is read from DietPlanner Settings (Configuration menu, default = 3).
 
