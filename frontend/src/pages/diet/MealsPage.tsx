@@ -12,6 +12,7 @@ import { ConfirmModal } from '../../components/common/ConfirmModal'
 import { ErrorAlert } from '../../components/common/ErrorAlert'
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'
 import type { Dish, DishCreate, DishType, DishUpdate } from '../../types/dish'
+import type { Ingredient } from '../../types/ingredient'
 import type { Slot, Day } from '../../types/profile'
 
 const SLOTS: Slot[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner']
@@ -51,9 +52,10 @@ function DishModal({
     } : { ...defaultDish, profile_id: activeProfile?.id ?? undefined }
   )
 
-  const [ingSearch, setIngSearch] = useState('')
-  const [addIngId, setAddIngId] = useState<number | ''>('')
-  const [addIngQty, setAddIngQty] = useState<number>(100)
+  const [ingSearch, setIngSearch]       = useState('')
+  const [addIngId, setAddIngId]         = useState<number | ''>('')
+  const [addIngQty, setAddIngQty]       = useState<number>(100)
+  const [showIngDropdown, setShowIngDropdown] = useState(false)
 
   const set = (field: keyof DishCreate, value: unknown) =>
     setForm(prev => ({ ...prev, [field]: value }))
@@ -68,10 +70,15 @@ function DishModal({
     set('day_preferences', current.includes(day) ? current.filter(d => d !== day) : [...current, day])
   }
 
+  const selectIngredient = (ing: Ingredient) => {
+    setIngSearch(ing.name)
+    setAddIngId(ing.id)
+    setShowIngDropdown(false)
+  }
+
   const addIngredient = () => {
     if (!addIngId) return
-    const exists = form.ingredients.find(i => i.ingredient_id === addIngId)
-    if (!exists) {
+    if (!form.ingredients.some(i => i.ingredient_id === addIngId)) {
       set('ingredients', [...form.ingredients, { ingredient_id: Number(addIngId), quantity_g: addIngQty }])
     }
     setAddIngId('')
@@ -99,10 +106,12 @@ function DishModal({
     onHide()
   }
 
-  const filteredIngredients = allIngredients.filter(i =>
-    i.name.toLowerCase().includes(ingSearch.toLowerCase()) &&
-    !form.ingredients.some(fi => fi.ingredient_id === i.id)
-  )
+  const filteredIngredients = ingSearch.trim()
+    ? allIngredients.filter(i =>
+        i.name.toLowerCase().includes(ingSearch.toLowerCase()) &&
+        !form.ingredients.some(fi => fi.ingredient_id === i.id)
+      ).slice(0, 10)
+    : []
   const isPending = create.isPending || update.isPending
   const error = create.error || update.error
 
@@ -221,44 +230,58 @@ function DishModal({
                 })}
               </tbody>
             </Table>
-            {/* Add ingredient row */}
-            <InputGroup size="sm">
-              <Form.Control
-                placeholder={t('meals.ingredientSearch')}
-                value={ingSearch}
-                onChange={e => { setIngSearch(e.target.value); setAddIngId('') }}
-                list="ing-list"
-              />
-              <datalist id="ing-list">
-                {filteredIngredients.slice(0, 20).map(i => (
-                  <option key={i.id} value={i.name} data-id={i.id} />
-                ))}
-              </datalist>
-              <Form.Control
-                type="number" min={1} step={1}
-                placeholder={t('meals.quantityG')}
-                value={addIngQty}
-                onChange={e => setAddIngQty(Number(e.target.value))}
-                style={{ maxWidth: 110 }}
-              />
-              <Button
-                variant="outline-primary"
-                onClick={() => {
-                  const matched = filteredIngredients.find(i =>
-                    i.name.toLowerCase() === ingSearch.toLowerCase()
-                  )
-                  if (matched) { setAddIngId(matched.id); setTimeout(addIngredient, 0) }
-                  else {
-                    const found = allIngredients.find(i =>
-                      i.name.toLowerCase() === ingSearch.toLowerCase()
-                    )
-                    if (found) { setAddIngId(found.id); setTimeout(addIngredient, 0) }
-                  }
-                }}
-              >
-                {t('common.add')}
-              </Button>
-            </InputGroup>
+            {/* Add ingredient row — autocomplete dropdown */}
+            <div className="position-relative">
+              <InputGroup size="sm">
+                <Form.Control
+                  placeholder={t('meals.ingredientSearch')}
+                  value={ingSearch}
+                  autoComplete="off"
+                  onChange={e => {
+                    setIngSearch(e.target.value)
+                    setAddIngId('')
+                    setShowIngDropdown(true)
+                  }}
+                  onFocus={() => ingSearch.trim() && setShowIngDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowIngDropdown(false), 150)}
+                />
+                <Form.Control
+                  type="number" min={1} step={1}
+                  placeholder="g"
+                  value={addIngQty}
+                  onChange={e => setAddIngQty(Number(e.target.value))}
+                  style={{ maxWidth: 110 }}
+                />
+                <Button
+                  variant="outline-primary"
+                  onClick={addIngredient}
+                  disabled={!addIngId}
+                >
+                  {t('common.add')}
+                </Button>
+              </InputGroup>
+
+              {showIngDropdown && filteredIngredients.length > 0 && (
+                <div
+                  className="position-absolute w-100 border rounded bg-white shadow-sm"
+                  style={{ zIndex: 1050, top: '100%', maxHeight: 220, overflowY: 'auto' }}
+                >
+                  {filteredIngredients.map(i => (
+                    <div
+                      key={i.id}
+                      className="px-3 py-2 border-bottom"
+                      style={{ cursor: 'pointer' }}
+                      onMouseDown={() => selectIngredient(i)}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '')}
+                    >
+                      <span className="fw-semibold">{i.name}</span>
+                      <small className="text-muted ms-2">{i.kcal_per_100g} kcal/100g</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </Col>
         </Row>
       </Modal.Body>
