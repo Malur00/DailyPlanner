@@ -110,6 +110,7 @@
     "proteinsG": "Proteins (g)",
     "fatsG": "Fats (g)",
     "sumMustBe100": "Values must sum to 100",
+    "computedNote": "Values computed at last save",
     "currentWeight": "Current weight",
     "bmi": "BMI"
   },

@@ -13,16 +13,7 @@ import { ConfirmModal } from '../../components/common/ConfirmModal'
 import { ErrorAlert } from '../../components/common/ErrorAlert'
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'
 import { SumValidator } from '../../components/common/SumValidator'
-import type { Profile, ProfileCreate, ProfileGoalCreate, ProfileGoalDistCreate, Slot } from '../../types/profile'
-
-const SLOTS: Slot[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner']
-const SLOT_KEYS: Record<Slot, string> = {
-  breakfast: 'profiles.breakfast',
-  morning_snack: 'profiles.morningSnack',
-  lunch: 'profiles.lunch',
-  afternoon_snack: 'profiles.afternoonSnack',
-  dinner: 'profiles.dinner',
-}
+import type { Profile, ProfileCreate, ProfileGoalCreate } from '../../types/profile'
 
 const defaultProfile: ProfileCreate = {
   name: '', gender: 'male', age: 30, weight_kg: 70, height_cm: 175,
@@ -38,7 +29,6 @@ const defaultGoal: ProfileGoalCreate = {
   macro_carbs_pct: 50,
   macro_proteins_pct: 20,
   macro_fats_pct: 30,
-  distributions: [],
 }
 
 // ── Profile Modal ────────────────────────────────────────────────────────────
@@ -207,32 +197,8 @@ function GoalModal({ show, onHide, profile }: { show: boolean; onHide: () => voi
       macro_carbs_pct: existingGoal.macro_carbs_pct,
       macro_proteins_pct: existingGoal.macro_proteins_pct,
       macro_fats_pct: existingGoal.macro_fats_pct,
-      distributions: existingGoal.distributions.map(d => ({
-        slot_type: d.slot_type,
-        macro_carbs_pct: d.macro_carbs_pct,
-        macro_proteins_pct: d.macro_proteins_pct,
-        macro_fats_pct: d.macro_fats_pct,
-      })),
     } : defaultGoal
   )
-
-  const setDist = (slot: Slot, field: keyof ProfileGoalDistCreate, value: number) => {
-    setForm(prev => {
-      const dists = [...(prev.distributions ?? [])]
-      const idx = dists.findIndex(d => d.slot_type === slot)
-      if (idx === -1) {
-        dists.push({ slot_type: slot, macro_carbs_pct: 0, macro_proteins_pct: 0, macro_fats_pct: 0, [field]: value })
-      } else {
-        dists[idx] = { ...dists[idx], [field]: value }
-      }
-      return { ...prev, distributions: dists }
-    })
-  }
-
-  const getDist = (slot: Slot): ProfileGoalDistCreate =>
-    form.distributions?.find(d => d.slot_type === slot) ?? {
-      slot_type: slot, macro_carbs_pct: 0, macro_proteins_pct: 0, macro_fats_pct: 0,
-    }
 
   const mealVals = [
     form.meal_dist_breakfast_pct, form.meal_dist_morning_snack_pct,
@@ -248,12 +214,13 @@ function GoalModal({ show, onHide, profile }: { show: boolean; onHide: () => voi
   const computed = existingGoal
 
   return (
-    <Modal show={show} onHide={onHide} size="xl" centered scrollable>
+    <Modal show={show} onHide={onHide} size="lg" centered scrollable>
       <Modal.Header closeButton>
         <Modal.Title>{t('profiles.goalTitle')} — {profile.name}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {upsert.error && <ErrorAlert error={upsert.error} />}
+
         <Tabs defaultActiveKey="meal" className="mb-3">
           {/* Tab A: Meal Distribution */}
           <Tab eventKey="meal" title={t('profiles.mealDistribution')}>
@@ -314,66 +281,23 @@ function GoalModal({ show, onHide, profile }: { show: boolean; onHide: () => voi
               </tbody>
             </Table>
           </Tab>
-
-          {/* Tab C: Per-slot distributions */}
-          <Tab eventKey="slots" title={t('profiles.perSlotDistributions')}>
-            <p className="text-muted small">{t('profiles.perSlotDistributions')} — {t('profiles.sumMustBe100')}</p>
-            <Table size="sm" bordered>
-              <thead>
-                <tr>
-                  <th>{t('profiles.slot')}</th>
-                  <th>{t('profiles.carbs')} %</th>
-                  <th>{t('profiles.proteins')} %</th>
-                  <th>{t('profiles.fats')} %</th>
-                  <th>∑</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SLOTS.map(slot => {
-                  const d = getDist(slot)
-                  return (
-                    <tr key={slot}>
-                      <td>{t(SLOT_KEYS[slot])}</td>
-                      {(['macro_carbs_pct', 'macro_proteins_pct', 'macro_fats_pct'] as (keyof ProfileGoalDistCreate)[]).map(field => (
-                        <td key={field} style={{ width: 100 }}>
-                          <Form.Control
-                            type="number" size="sm" min={0} max={100} step={0.5}
-                            value={d[field] as number}
-                            onChange={e => setDist(slot, field, Number(e.target.value))}
-                          />
-                        </td>
-                      ))}
-                      <td>
-                        <SumValidator values={[d.macro_carbs_pct, d.macro_proteins_pct, d.macro_fats_pct]} label="∑" />
-                        {Math.round((d.macro_carbs_pct + d.macro_proteins_pct + d.macro_fats_pct) * 10) === 1000 && (
-                          <Badge bg="success">✓</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </Table>
-          </Tab>
-
-          {/* Tab D: Computed values */}
-          <Tab eventKey="computed" title={t('profiles.computedValues')}>
-            {!computed ? (
-              <p className="text-muted">{t('common.noData')}</p>
-            ) : (
-              <Table size="sm" bordered>
-                <tbody>
-                  <tr><td>{t('profiles.bmr')}</td><td><strong>{computed.bmr?.toFixed(1) ?? '—'}</strong> kcal</td></tr>
-                  <tr><td>{t('profiles.tdee')}</td><td><strong>{computed.tdee?.toFixed(1) ?? '—'}</strong> kcal</td></tr>
-                  <tr><td>{t('profiles.kcalTarget')}</td><td><strong>{computed.kcal_target?.toFixed(1) ?? '—'}</strong> kcal</td></tr>
-                  <tr><td>{t('profiles.carbsG')}</td><td>{computed.carbs_g?.toFixed(1) ?? '—'} g</td></tr>
-                  <tr><td>{t('profiles.proteinsG')}</td><td>{computed.proteins_g?.toFixed(1) ?? '—'} g</td></tr>
-                  <tr><td>{t('profiles.fatsG')}</td><td>{computed.fats_g?.toFixed(1) ?? '—'} g</td></tr>
-                </tbody>
-              </Table>
-            )}
-          </Tab>
         </Tabs>
+
+        {/* Computed values panel — always visible when goal data is available */}
+        {computed && (computed.bmr || computed.tdee || computed.kcal_target) && (
+          <div className="p-3 bg-light rounded border mt-2">
+            <div className="d-flex flex-wrap gap-3 align-items-center">
+              <span className="small"><span className="text-muted">BMR:</span> <strong>{computed.bmr?.toFixed(0) ?? '—'}</strong> kcal</span>
+              <span className="small"><span className="text-muted">TDEE:</span> <strong>{computed.tdee?.toFixed(0) ?? '—'}</strong> kcal</span>
+              <span className="small text-primary"><span className="text-muted">{t('profiles.kcalTarget')}:</span> <strong>{computed.kcal_target?.toFixed(0) ?? '—'}</strong> kcal</span>
+              <span className="vr" />
+              <span className="small"><span className="text-muted">{t('profiles.carbs')}:</span> {computed.carbs_g?.toFixed(0) ?? '—'} g</span>
+              <span className="small"><span className="text-muted">{t('profiles.proteins')}:</span> {computed.proteins_g?.toFixed(0) ?? '—'} g</span>
+              <span className="small"><span className="text-muted">{t('profiles.fats')}:</span> {computed.fats_g?.toFixed(0) ?? '—'} g</span>
+            </div>
+            <div className="text-muted mt-1" style={{ fontSize: '0.7rem' }}>{t('profiles.computedNote')}</div>
+          </div>
+        )}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onHide}>{t('common.cancel')}</Button>

@@ -5,7 +5,8 @@ Algorithm (from DietPlanner SKILL.md):
     1. Filter Primary dishes matching slot + day_preferences
     2. Exclude dishes used >= max_per_week times already
     3. Random select → compute macros
-    4. Compare to ProfileGoalDist target for this slot
+    4. Compare to global macro target (macro_carbs_pct / macro_proteins_pct / macro_fats_pct)
+       — same target applied to every slot (derived from ProfileGoal overall daily macros)
     5a. variable_portions=False → add Secondary/Side with dominant macro gap
         → rebalance primary portion size (scale total grams, NOT ingredient ratios)
         → iterate up to N times
@@ -17,13 +18,14 @@ Algorithm (from DietPlanner SKILL.md):
 import random
 from collections import defaultdict
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
 
 from app.models.diet import (
     Dish, DishIngredient, DailyPlan, GroceryItem,
     GroceryList, Ingredient, Meal, MealPlan,
-    Profile, ProfileGoal, ProfileGoalDist,
+    Profile, ProfileGoal,
 )
 
 SLOTS = ["breakfast", "morning_snack", "lunch", "afternoon_snack", "dinner"]
@@ -77,7 +79,7 @@ def _macro_pct(macros: dict) -> dict:
     }
 
 
-def _largest_gap_macro(actual_pct: dict, target_dist: ProfileGoalDist) -> str:
+def _largest_gap_macro(actual_pct: dict, target_dist) -> str:
     """Return which macro key ('carbs_g'|'proteins_g'|'fats_g') has the largest gap."""
     gaps = {
         "carbs_g":    abs(actual_pct["carbs_pct"]    - target_dist.macro_carbs_pct),
@@ -108,10 +110,13 @@ def generate_weekly_plan(
             "Go to Configuration → User Profiles → Configure Goal before generating a plan."
         )
 
-    # Build slot→target dict
-    slot_targets: dict[str, ProfileGoalDist] = {
-        d.slot_type: d for d in goal.distributions
-    }
+    # Build slot→target dict — use global daily macro % for every slot
+    _global_target = SimpleNamespace(
+        macro_carbs_pct=goal.macro_carbs_pct,
+        macro_proteins_pct=goal.macro_proteins_pct,
+        macro_fats_pct=goal.macro_fats_pct,
+    )
+    slot_targets: dict[str, object] = {slot: _global_target for slot in SLOTS}
 
     # Create MealPlan
     meal_plan = MealPlan(profile_id=profile_id, week_start_date=week_start_date)

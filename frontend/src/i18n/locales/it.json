@@ -110,6 +110,7 @@
     "proteinsG": "Proteine (g)",
     "fatsG": "Grassi (g)",
     "sumMustBe100": "I valori devono sommare a 100",
+    "computedNote": "Valori calcolati all'ultimo salvataggio",
     "currentWeight": "Peso attuale",
     "bmi": "IMC"
   },

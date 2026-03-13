@@ -66,5 +66,5 @@ export type ProfileGoalCreate = {
   macro_carbs_pct: number
   macro_proteins_pct: number
   macro_fats_pct: number
-  distributions: ProfileGoalDistCreate[]
+  distributions?: ProfileGoalDistCreate[]
 }
