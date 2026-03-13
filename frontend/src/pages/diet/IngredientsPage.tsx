@@ -33,6 +33,7 @@ function IngredientModal({
   const { t } = useTranslation()
   const create = useCreateIngredient()
   const update = useUpdateIngredient()
+  const aiLookup = useAiLookup()
 
   const initForm = (): IngredientCreate => {
     if (aiPreFill && !initial) return { ...aiPreFill }
@@ -81,8 +82,19 @@ function IngredientModal({
     onHide()
   }
 
+  const handleModalAiLookup = async () => {
+    if (!form.name.trim()) return
+    const result = await aiLookup.mutateAsync(form.name.trim())
+    setForm(prev => ({
+      ...prev,
+      name: result.name, unit: result.unit,
+      kcal_per_100g: result.kcal_per_100g, proteins_g: result.proteins_g,
+      carbs_g: result.carbs_g, fats_g: result.fats_g,
+    }))
+  }
+
   const isPending = create.isPending || update.isPending
-  const error = create.error || update.error
+  const error = create.error || update.error || aiLookup.error
   const isAiFilled = !!aiPreFill && !initial
 
   return (
@@ -106,11 +118,24 @@ function IngredientModal({
           <Col md={6}>
             <Form.Group>
               <Form.Label>{t('ingredients.name')} *</Form.Label>
-              <Form.Control
-                value={form.name}
-                onChange={e => set('name', e.target.value)}
-                autoFocus={!isAiFilled}
-              />
+              <div className="d-flex gap-2">
+                <Form.Control
+                  value={form.name}
+                  onChange={e => set('name', e.target.value)}
+                  autoFocus={!isAiFilled}
+                />
+                <Button
+                  variant="outline-primary"
+                  onClick={handleModalAiLookup}
+                  disabled={aiLookup.isPending || !form.name.trim()}
+                  title={t('ingredients.aiLookupSearch')}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {aiLookup.isPending
+                    ? <Spinner size="sm" animation="border" />
+                    : '🤖 AI'}
+                </Button>
+              </div>
             </Form.Group>
           </Col>
           <Col md={3}>
