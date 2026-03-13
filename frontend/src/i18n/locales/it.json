@@ -181,7 +181,10 @@
       "fri": "Ven", "sat": "Sab", "sun": "Dom"
     },
     "kcal": "kcal",
-    "empty": "—"
+    "empty": "—",
+    "newDishFromIngredient": "Da Ingrediente",
+    "newDishFromIngredientTitle": "Nuovo Piatto · Da Ingrediente",
+    "createAndUse": "Crea Ingrediente e Usa"
   },
   "grocery": {
     "title": "Lista della Spesa",

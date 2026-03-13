@@ -181,7 +181,10 @@
       "fri": "Fri", "sat": "Sat", "sun": "Sun"
     },
     "kcal": "kcal",
-    "empty": "—"
+    "empty": "—",
+    "newDishFromIngredient": "From Ingredient",
+    "newDishFromIngredientTitle": "New Dish · From Ingredient",
+    "createAndUse": "Create Ingredient & Use"
   },
   "grocery": {
     "title": "Grocery List",

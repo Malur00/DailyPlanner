@@ -5,14 +5,14 @@ import {
 } from 'react-bootstrap'
 import { useTranslation } from 'react-i18next'
 import { useDishes, useCreateDish, useUpdateDish, useDeleteDish } from '../../hooks/useDishes'
-import { useIngredients } from '../../hooks/useIngredients'
+import { useIngredients, useCreateIngredient, useAiLookup } from '../../hooks/useIngredients'
 import { useMealPlans, useGenerateMealPlan, useDeleteMealPlan } from '../../hooks/useMealPlans'
 import { useProfile } from '../../context/ProfileContext'
 import { ConfirmModal } from '../../components/common/ConfirmModal'
 import { ErrorAlert } from '../../components/common/ErrorAlert'
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'
 import type { Dish, DishCreate, DishType, DishUpdate } from '../../types/dish'
-import type { Ingredient } from '../../types/ingredient'
+import type { Ingredient, IngredientCreate } from '../../types/ingredient'
 import type { Slot, Day } from '../../types/profile'
 
 const SLOTS: Slot[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner']
@@ -299,6 +299,260 @@ function DishModal({
   )
 }
 
+// ── Dish from Ingredient Modal ───────────────────────────────────────────────
+
+function DishFromIngredientModal({
+  show, onHide,
+}: { show: boolean; onHide: () => void }) {
+  const { t } = useTranslation()
+  const { activeProfile } = useProfile()
+  const createDish = useCreateDish()
+  const createIng  = useCreateIngredient()
+  const aiLookup   = useAiLookup()
+  const { data: allIngredients = [] } = useIngredients()
+
+  // ── ingredient search
+  const [ingSearch, setIngSearch]       = useState('')
+  const [selectedIng, setSelectedIng]   = useState<Ingredient | null>(null)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [qty, setQty]                   = useState<number>(100)
+  const [aiPreview, setAiPreview]       = useState<IngredientCreate | null>(null)
+
+  // ── dish fields
+  const [dishType, setDishType]           = useState<DishType>('primary')
+  const [maxPerWeek, setMaxPerWeek]       = useState<number | undefined>(undefined)
+  const [varPortions, setVarPortions]     = useState(false)
+  const [mealSlots, setMealSlots]         = useState<Slot[]>([])
+  const [dayPrefs, setDayPrefs]           = useState<Day[]>([])
+
+  const filtered = ingSearch.trim()
+    ? allIngredients
+        .filter(i => i.name.toLowerCase().includes(ingSearch.toLowerCase()))
+        .slice(0, 10)
+    : []
+
+  const selectIngredient = (ing: Ingredient) => {
+    setSelectedIng(ing)
+    setIngSearch(ing.name)
+    setAiPreview(null)
+    setShowDropdown(false)
+  }
+
+  const handleAi = async () => {
+    const result = await aiLookup.mutateAsync(ingSearch.trim())
+    setAiPreview({
+      name: result.name, unit: result.unit,
+      kcal_per_100g: result.kcal_per_100g, proteins_g: result.proteins_g,
+      carbs_g: result.carbs_g, fats_g: result.fats_g,
+      seasonality_months: null,
+    })
+    setSelectedIng(null)
+  }
+
+  const handleConfirmAi = async () => {
+    if (!aiPreview) return
+    const created = await createIng.mutateAsync(aiPreview)
+    setSelectedIng(created)
+    setIngSearch(created.name)
+    setAiPreview(null)
+  }
+
+  const toggleSlot = (slot: Slot) =>
+    setMealSlots(prev => prev.includes(slot) ? prev.filter(s => s !== slot) : [...prev, slot])
+
+  const toggleDay = (day: Day) =>
+    setDayPrefs(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
+
+  const handleSubmit = async () => {
+    if (!selectedIng) return
+    await createDish.mutateAsync({
+      name: selectedIng.name,
+      dish_type: dishType,
+      max_per_week: maxPerWeek ?? null,
+      profile_id: activeProfile?.id,
+      meal_slots: mealSlots,
+      variable_portions: varPortions,
+      day_preferences: dayPrefs,
+      ingredients: [{ ingredient_id: selectedIng.id, quantity_g: qty }],
+    } as DishCreate)
+    onHide()
+  }
+
+  const isPending = createDish.isPending || createIng.isPending
+  const error     = createDish.error || createIng.error || aiLookup.error
+
+  return (
+    <Modal show={show} onHide={onHide} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title>{t('meals.newDishFromIngredientTitle')}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {error && <ErrorAlert error={error} />}
+
+        {/* ── Ingredient search ── */}
+        <Form.Label className="fw-semibold">{t('meals.ingredients')} *</Form.Label>
+        <div className="position-relative mb-2">
+          <InputGroup>
+            <Form.Control
+              placeholder={t('meals.ingredientSearch')}
+              value={ingSearch}
+              autoComplete="off"
+              onChange={e => {
+                setIngSearch(e.target.value)
+                setSelectedIng(null)
+                setAiPreview(null)
+                setShowDropdown(true)
+              }}
+              onFocus={() => ingSearch.trim() && setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+            />
+            <Form.Control
+              type="number" min={1} step={1}
+              value={qty}
+              onChange={e => setQty(Number(e.target.value))}
+              style={{ maxWidth: 90 }}
+              title={t('meals.quantityG')}
+            />
+            <Button
+              variant={selectedIng ? 'outline-success' : 'outline-primary'}
+              disabled={aiLookup.isPending || !ingSearch.trim()}
+              onClick={handleAi}
+              title={t('ingredients.aiLookupSearch')}
+            >
+              {aiLookup.isPending
+                ? <Spinner size="sm" animation="border" />
+                : selectedIng ? '✓ AI' : '🤖 AI'}
+            </Button>
+          </InputGroup>
+
+          {/* autocomplete dropdown */}
+          {showDropdown && filtered.length > 0 && (
+            <div
+              className="position-absolute w-100 border rounded bg-white shadow-sm"
+              style={{ zIndex: 1050, top: '100%', maxHeight: 200, overflowY: 'auto' }}
+            >
+              {filtered.map(i => (
+                <div
+                  key={i.id}
+                  className="px-3 py-2 border-bottom"
+                  style={{ cursor: 'pointer' }}
+                  onMouseDown={() => selectIngredient(i)}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                >
+                  <span className="fw-semibold">{i.name}</span>
+                  <small className="text-muted ms-2">{i.kcal_per_100g} kcal/100g · P {i.proteins_g}g C {i.carbs_g}g F {i.fats_g}g</small>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* selected badge */}
+        {selectedIng && (
+          <Alert variant="success" className="py-2 small mb-3">
+            ✓ <strong>{selectedIng.name}</strong> — {selectedIng.kcal_per_100g} kcal/100g ·
+            P {selectedIng.proteins_g}g · C {selectedIng.carbs_g}g · F {selectedIng.fats_g}g · {qty}g
+          </Alert>
+        )}
+
+        {/* AI preview */}
+        {aiPreview && !selectedIng && (
+          <Alert variant="info" className="py-2 small mb-3">
+            <div className="d-flex justify-content-between align-items-start">
+              <div>
+                🤖 <strong>{aiPreview.name}</strong> — {aiPreview.kcal_per_100g} kcal/100g ·
+                P {aiPreview.proteins_g}g · C {aiPreview.carbs_g}g · F {aiPreview.fats_g}g
+              </div>
+              <div className="d-flex gap-2 ms-3 flex-shrink-0">
+                <Button size="sm" variant="info" onClick={handleConfirmAi} disabled={createIng.isPending}>
+                  {createIng.isPending
+                    ? <Spinner size="sm" animation="border" />
+                    : t('meals.createAndUse')}
+                </Button>
+                <Button size="sm" variant="outline-secondary" onClick={() => setAiPreview(null)}>×</Button>
+              </div>
+            </div>
+          </Alert>
+        )}
+
+        <Row className="g-3 mt-1">
+          {/* Dish type */}
+          <Col md={4}>
+            <Form.Group>
+              <Form.Label>{t('meals.dishType')}</Form.Label>
+              <Form.Select value={dishType} onChange={e => setDishType(e.target.value as DishType)}>
+                {DISH_TYPES.map(dt => (
+                  <option key={dt} value={dt}>{t(`meals.${dt}`)}</option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
+          {/* Max per week */}
+          <Col md={3}>
+            <Form.Group>
+              <Form.Label>{t('meals.maxPerWeek')}</Form.Label>
+              <Form.Control
+                type="number" min={1}
+                placeholder={t('meals.unlimited')}
+                value={maxPerWeek ?? ''}
+                onChange={e => setMaxPerWeek(e.target.value ? Number(e.target.value) : undefined)}
+              />
+            </Form.Group>
+          </Col>
+          {/* Variable portions */}
+          <Col md={5} className="d-flex align-items-end">
+            <Form.Check
+              type="checkbox"
+              label={t('meals.variablePortions')}
+              checked={varPortions}
+              onChange={e => setVarPortions(e.target.checked)}
+            />
+          </Col>
+          {/* Meal slots */}
+          <Col md={12}>
+            <Form.Label>{t('meals.mealSlots')} *</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {SLOTS.map(slot => (
+                <Form.Check
+                  key={slot} inline type="checkbox" id={`fis-slot-${slot}`}
+                  label={t(`meals.slots.${slot}`)}
+                  checked={mealSlots.includes(slot)}
+                  onChange={() => toggleSlot(slot)}
+                />
+              ))}
+            </div>
+          </Col>
+          {/* Day preferences */}
+          <Col md={12}>
+            <Form.Label>{t('meals.dayPreferences')}</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {DAYS.map(day => (
+                <Form.Check
+                  key={day} inline type="checkbox" id={`fis-day-${day}`}
+                  label={t(`meals.days.${day}`)}
+                  checked={dayPrefs.includes(day)}
+                  onChange={() => toggleDay(day)}
+                />
+              ))}
+            </div>
+          </Col>
+        </Row>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onHide}>{t('common.cancel')}</Button>
+        <Button
+          variant="primary" onClick={handleSubmit}
+          disabled={isPending || !selectedIng || mealSlots.length === 0}
+        >
+          {isPending && <Spinner size="sm" animation="border" className="me-1" />}
+          {t('common.save')}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  )
+}
+
 // ── Dish Library Tab ─────────────────────────────────────────────────────────
 
 function DishLibraryTab() {
@@ -313,9 +567,10 @@ function DishLibraryTab() {
     profile_id: activeProfile?.id,
   })
   const deleteDish = useDeleteDish()
-  const [showModal, setShowModal] = useState(false)
-  const [editTarget, setEditTarget] = useState<Dish | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Dish | null>(null)
+  const [showModal, setShowModal]           = useState(false)
+  const [showFromIngModal, setShowFromIngModal] = useState(false)
+  const [editTarget, setEditTarget]         = useState<Dish | null>(null)
+  const [deleteTarget, setDeleteTarget]     = useState<Dish | null>(null)
 
   const openCreate = () => { setEditTarget(null); setShowModal(true) }
   const openEdit = (d: Dish) => { setEditTarget(d); setShowModal(true) }
@@ -339,8 +594,13 @@ function DishLibraryTab() {
             ))}
           </Form.Select>
         </Col>
-        <Col md="auto" className="ms-auto">
-          <Button size="sm" variant="primary" onClick={openCreate}>{t('meals.newDish')}</Button>
+        <Col md="auto" className="ms-auto d-flex gap-2">
+          <Button size="sm" variant="outline-primary" onClick={() => setShowFromIngModal(true)}>
+            + {t('meals.newDishFromIngredient')}
+          </Button>
+          <Button size="sm" variant="primary" onClick={openCreate}>
+            + {t('meals.newDish')}
+          </Button>
         </Col>
       </Row>
 
@@ -394,6 +654,10 @@ function DishLibraryTab() {
 
       {showModal && (
         <DishModal show={showModal} onHide={() => setShowModal(false)} initial={editTarget} />
+      )}
+
+      {showFromIngModal && (
+        <DishFromIngredientModal show={showFromIngModal} onHide={() => setShowFromIngModal(false)} />
       )}
 
       <ConfirmModal
