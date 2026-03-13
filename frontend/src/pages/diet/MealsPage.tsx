@@ -31,8 +31,10 @@ function DishModal({
 }: { show: boolean; onHide: () => void; initial: Dish | null }) {
   const { t } = useTranslation()
   const { activeProfile } = useProfile()
-  const create = useCreateDish()
-  const update = useUpdateDish()
+  const create    = useCreateDish()
+  const update    = useUpdateDish()
+  const createIng = useCreateIngredient()
+  const aiLookup  = useAiLookup()
   const { data: allIngredients = [] } = useIngredients()
 
   const [form, setForm] = useState<DishCreate>(() =>
@@ -112,8 +114,22 @@ function DishModal({
         !form.ingredients.some(fi => fi.ingredient_id === i.id)
       ).slice(0, 10)
     : []
+
+  const noResults = ingSearch.trim() !== '' && filteredIngredients.length === 0 && !addIngId
+
+  const handleIngAiLookup = async () => {
+    const result = await aiLookup.mutateAsync(ingSearch.trim())
+    const created = await createIng.mutateAsync({
+      name: result.name, unit: result.unit,
+      kcal_per_100g: result.kcal_per_100g, proteins_g: result.proteins_g,
+      carbs_g: result.carbs_g, fats_g: result.fats_g,
+      seasonality_months: null,
+    })
+    selectIngredient(created)
+  }
+
   const isPending = create.isPending || update.isPending
-  const error = create.error || update.error
+  const error = create.error || update.error || aiLookup.error || createIng.error
 
   return (
     <Modal show={show} onHide={onHide} size="xl" centered scrollable>
@@ -252,6 +268,18 @@ function DishModal({
                   onChange={e => setAddIngQty(Number(e.target.value))}
                   style={{ maxWidth: 110 }}
                 />
+                {noResults && (
+                  <Button
+                    variant="outline-warning"
+                    onClick={handleIngAiLookup}
+                    disabled={aiLookup.isPending || createIng.isPending}
+                    title={t('ingredients.aiLookupSearch')}
+                  >
+                    {(aiLookup.isPending || createIng.isPending)
+                      ? <Spinner size="sm" animation="border" />
+                      : '🤖 AI'}
+                  </Button>
+                )}
                 <Button
                   variant="outline-primary"
                   onClick={addIngredient}
