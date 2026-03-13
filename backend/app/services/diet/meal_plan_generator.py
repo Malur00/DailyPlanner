@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from sqlalchemy.orm import Session
 
 from app.models.diet import (
-    Dish, DishIngredient, DailyPlan, GroceryItem,
+    Dish, DishIngredient, DailyPlan, DietSettings, GroceryItem,
     GroceryList, Ingredient, Meal, MealPlan,
     Profile, ProfileGoal,
 )
@@ -43,8 +43,9 @@ SLOT_DIST_FIELDS = {
     "dinner":          "meal_dist_dinner_pct",
 }
 
-# Default max iterations if DietPlanner Settings not yet implemented
-DEFAULT_N = 3
+# Built-in fallbacks (used if DietSettings row is missing)
+_DEFAULT_N         = 3
+_DEFAULT_TOLERANCE = 5.0
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +110,6 @@ def generate_weekly_plan(
     db: Session,
     profile_id: int,
     week_start_date: date,
-    N: int = DEFAULT_N,
 ) -> MealPlan:
     profile: Profile = db.get(Profile, profile_id)
     if not profile:
@@ -121,6 +121,11 @@ def generate_weekly_plan(
             f"Profile \"{profile.name}\" has no goal configured. "
             "Go to Configuration → User Profiles → Configure Goal before generating a plan."
         )
+
+    # Load generator settings from DB (singleton id=1), fall back to built-in defaults
+    diet_settings: DietSettings | None = db.get(DietSettings, 1)
+    N: int        = diet_settings.max_rebalance_iterations if diet_settings else _DEFAULT_N
+    tolerance: float = diet_settings.macro_tolerance_pct  if diet_settings else _DEFAULT_TOLERANCE
 
     # Compute daily kcal target from profile BMR / TDEE / goal offset
     preview = compute_goal_preview(profile, goal)
@@ -159,7 +164,7 @@ def generate_weekly_plan(
             meal = _fill_slot(
                 db, daily_plan, slot, day_name,
                 slot_targets, slot_kcal_targets[slot],
-                usage_count, profile_id, N,
+                usage_count, profile_id, N, tolerance,
             )
             db.add(meal)
 
@@ -183,6 +188,7 @@ def _fill_slot(
     usage_count: dict,
     profile_id: int,
     N: int,
+    tolerance: float,
 ) -> Meal:
     target = slot_targets.get(slot)
 
@@ -228,10 +234,10 @@ def _fill_slot(
         actual_pct = _macro_pct(macros)
         for _ in range(N):
             gap_macro = _largest_gap_macro(actual_pct, target)
-            # Check if already within tolerance (±5%)
-            carbs_ok    = abs(actual_pct["carbs_pct"]    - target.macro_carbs_pct)    <= 5
-            proteins_ok = abs(actual_pct["proteins_pct"] - target.macro_proteins_pct) <= 5
-            fats_ok     = abs(actual_pct["fats_pct"]     - target.macro_fats_pct)     <= 5
+            # Check if already within configurable tolerance
+            carbs_ok    = abs(actual_pct["carbs_pct"]    - target.macro_carbs_pct)    <= tolerance
+            proteins_ok = abs(actual_pct["proteins_pct"] - target.macro_proteins_pct) <= tolerance
+            fats_ok     = abs(actual_pct["fats_pct"]     - target.macro_fats_pct)     <= tolerance
             if carbs_ok and proteins_ok and fats_ok:
                 break
 

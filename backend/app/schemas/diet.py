@@ -318,3 +318,23 @@ class GroceryListResponse(BaseModel):
 
 class GroceryItemCheckUpdate(BaseModel):
     checked: bool = Field(..., description="New checked/unchecked state for the grocery item")
+
+
+# ---------------------------------------------------------------------------
+# Diet Settings  (singleton)
+# ---------------------------------------------------------------------------
+
+class DietSettingsBase(BaseModel):
+    macro_tolerance_pct:      float = Field(5.0, ge=1.0, le=20.0,
+        description="±% tolerance for macro ratio comparison in the plan generator (1–20)")
+    max_rebalance_iterations: int   = Field(3,   ge=1,   le=10,
+        description="Maximum rebalancing iterations per slot in the plan generator (1–10)")
+
+
+class DietSettingsUpdate(DietSettingsBase):
+    pass
+
+
+class DietSettingsResponse(DietSettingsBase):
+    class Config:
+        from_attributes = True

@@ -217,3 +217,16 @@ class GroceryItem(Base):
 
     grocery_list = relationship("GroceryList", back_populates="items")
     ingredient   = relationship("Ingredient",  back_populates="grocery_items")
+
+
+# ---------------------------------------------------------------------------
+# Diet Settings  (singleton — always id = 1)
+# ---------------------------------------------------------------------------
+
+class DietSettings(Base):
+    """Global settings for the DietPlanner generator (singleton row, id=1)."""
+    __tablename__ = "diet_settings"
+
+    id                       = Column(Integer, primary_key=True, default=1)
+    macro_tolerance_pct      = Column(Float,   nullable=False, default=5.0)   # ±% tolerance for macro rebalancing
+    max_rebalance_iterations = Column(Integer, nullable=False, default=3)     # N iterations in _fill_slot

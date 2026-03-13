@@ -207,6 +207,14 @@
     "noLogs": "Nessuna pesata registrata. Inizia a tracciare!",
     "selectProfile": "Seleziona un profilo per vedere il log"
   },
+  "dietSettings": {
+    "title": "Impostazioni Dieta",
+    "generatorSection": "Generatore Piano",
+    "macroTolerance": "Tolleranza Macro",
+    "macroToleranceDesc": "Il generatore smette di riequilibrare quando tutti i macro sono entro ±questo valore dal target. Più basso = più preciso (richiede più iterazioni). Range: 1–20%.",
+    "maxIterations": "Iterazioni Max Rebalancing",
+    "maxIterationsDesc": "Numero massimo di cicli di riequilibrio macro per ogni slot pasto durante la generazione del piano. Valori più alti migliorano la precisione ma rallentano la generazione. Range: 1–10."
+  },
   "dashboard": {
     "title": "Dashboard",
     "noProfiles": "Nessun profilo. Crea il tuo primo profilo in Configurazione → Profili Utente.",

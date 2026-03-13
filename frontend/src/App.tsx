@@ -10,6 +10,7 @@ import WeightLogsPage from './pages/diet/WeightLogsPage'
 import GymPage from './pages/gym/GymPage'
 import SavingPage from './pages/saving/SavingPage'
 import UserProfilesPage from './pages/config/UserProfilesPage'
+import DietSettingsPage from './pages/config/DietSettingsPage'
 import { PlaceholderConfigPage } from './pages/config/PlaceholderConfigPage'
 
 export default function App() {
@@ -36,7 +37,7 @@ export default function App() {
         {/* Configuration */}
         <Route path="config">
           <Route path="profiles" element={<UserProfilesPage />} />
-          <Route path="diet-settings" element={<PlaceholderConfigPage titleKey="nav_config.dietSettings" />} />
+          <Route path="diet-settings" element={<DietSettingsPage />} />
           <Route path="banks" element={<PlaceholderConfigPage titleKey="nav_config.banks" />} />
           <Route path="file-formats" element={<PlaceholderConfigPage titleKey="nav_config.fileFormats" />} />
           <Route path="category-mapping" element={<PlaceholderConfigPage titleKey="nav_config.categoryMapping" />} />

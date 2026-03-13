@@ -207,6 +207,14 @@
     "noLogs": "No weight logs yet. Start tracking!",
     "selectProfile": "Select a profile to view logs"
   },
+  "dietSettings": {
+    "title": "Diet Settings",
+    "generatorSection": "Plan Generator",
+    "macroTolerance": "Macro Tolerance",
+    "macroToleranceDesc": "The generator stops rebalancing when all macro percentages are within ±this value of the target. Lower = stricter (more iterations needed). Range: 1–20%.",
+    "maxIterations": "Max Rebalance Iterations",
+    "maxIterationsDesc": "Maximum number of macro rebalancing loops per meal slot during plan generation. Higher values improve accuracy but slow down generation. Range: 1–10."
+  },
   "dashboard": {
     "title": "Dashboard",
     "noProfiles": "No profiles yet. Create your first profile in Configuration → User Profiles.",

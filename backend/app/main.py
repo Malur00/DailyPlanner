@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers.diet import profiles, ingredients, dishes, meal_plans, weight_logs, grocery_lists
+from app.routers.diet import profiles, ingredients, dishes, meal_plans, weight_logs, grocery_lists, settings as diet_settings
 from app.routers import gym, saving
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,13 @@ TAGS_METADATA = [
         ),
     },
     {
+        "name": "Diet — Settings",
+        "description": (
+            "Global singleton settings for the DietPlanner generator. "
+            "Controls macro tolerance % and max rebalancing iterations used during plan generation."
+        ),
+    },
+    {
         "name": "GymPlanner",
         "description": "🚧 Not yet implemented — returns HTTP 501.",
     },
@@ -123,7 +130,8 @@ app.include_router(ingredients.router,   prefix="/api/diet/ingredients",   tags=
 app.include_router(dishes.router,        prefix="/api/diet/dishes",        tags=["Diet — Dishes"])
 app.include_router(meal_plans.router,    prefix="/api/diet/meal-plans",    tags=["Diet — Meal Plans"])
 app.include_router(weight_logs.router,   prefix="/api/diet/weight-logs",   tags=["Diet — Weight Logs"])
-app.include_router(grocery_lists.router, prefix="/api/diet/grocery-lists", tags=["Diet — Grocery Lists"])
+app.include_router(grocery_lists.router,  prefix="/api/diet/grocery-lists", tags=["Diet — Grocery Lists"])
+app.include_router(diet_settings.router,  prefix="/api/diet/settings",      tags=["Diet — Settings"])
 
 # Placeholders
 app.include_router(gym.router,    prefix="/api/gym",    tags=["GymPlanner"])
