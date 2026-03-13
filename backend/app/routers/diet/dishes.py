@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[DishResponse],
     summary="List dishes (optional: filter by type / slot / profile)",
 )
@@ -44,7 +44,7 @@ def list_dishes(
 
 
 @router.post(
-    "/",
+    "",
     response_model=DishResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new dish (with optional ingredients)",

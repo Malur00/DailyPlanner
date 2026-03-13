@@ -17,7 +17,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 @router.get(
-    "/",
+    "",
     response_model=list[ProfileResponse],
     summary="List all profiles",
 )
@@ -27,7 +27,7 @@ def list_profiles(db: Session = Depends(get_db)):
 
 
 @router.post(
-    "/",
+    "",
     response_model=ProfileResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new profile",

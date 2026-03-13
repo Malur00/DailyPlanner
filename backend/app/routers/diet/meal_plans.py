@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[MealPlanResponse],
     summary="List meal plans for a profile",
 )
@@ -23,7 +23,7 @@ def list_meal_plans(
 
 
 @router.post(
-    "/",
+    "",
     response_model=MealPlanResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create an empty meal plan",

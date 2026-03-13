@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[WeightLogResponse],
     summary="List weight log entries for a profile (filterable by date range)",
 )
@@ -36,7 +36,7 @@ def list_weight_logs(
 
 
 @router.post(
-    "/",
+    "",
     response_model=WeightLogResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Add a weight log entry",

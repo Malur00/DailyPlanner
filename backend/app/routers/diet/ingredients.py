@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[IngredientResponse],
     summary="List ingredients (optional: filter by name / available month)",
 )
@@ -39,7 +39,7 @@ def list_ingredients(
 
 
 @router.post(
-    "/",
+    "",
     response_model=IngredientResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Add a new ingredient to the master library",
