@@ -264,7 +264,7 @@ function DishModal({
               {showIngDropdown && filteredIngredients.length > 0 && (
                 <div
                   className="position-absolute w-100 border rounded bg-white shadow-sm"
-                  style={{ zIndex: 1050, top: '100%', maxHeight: 220, overflowY: 'auto' }}
+                  style={{ zIndex: 1050, bottom: '100%', maxHeight: 220, overflowY: 'auto' }}
                 >
                   {filteredIngredients.map(i => (
                     <div
@@ -429,7 +429,7 @@ function DishFromIngredientModal({
           {showDropdown && filtered.length > 0 && (
             <div
               className="position-absolute w-100 border rounded bg-white shadow-sm"
-              style={{ zIndex: 1050, top: '100%', maxHeight: 200, overflowY: 'auto' }}
+              style={{ zIndex: 1050, bottom: '100%', maxHeight: 200, overflowY: 'auto' }}
             >
               {filtered.map(i => (
                 <div
