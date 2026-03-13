@@ -39,8 +39,11 @@ Manage the dish library used to compose the weekly meal plan.
   - Ingredients             (search + add from ingredient library)
 
   Ingredient search in Dish:
-  - Type to search existing ingredients in DB
-  - If not found → "Search with AI" button (Claude AI macro lookup)
+  - Autocomplete dropdown: as the user types, up to 10 matching ingredients
+    are fetched from the DB (client-side filter on cached list, case-insensitive)
+  - Selecting a suggestion fills the name field and enables the "Aggiungi" button
+  - "Aggiungi" is disabled until a valid ingredient is selected from the dropdown
+  - Already-added ingredients are excluded from suggestions
 
 ### Ingredients
 Master ingredient library.
@@ -55,13 +58,21 @@ Master ingredient library.
   - Seasonality             (months available: Jan–Dec, multi-checkbox,
                              all checked by default)
 
-  If ingredient not found → "Search with AI" button (Claude AI macro lookup)
+  AI lookup — two entry points:
+  1. Main page CTA: when debounced search returns 0 results and search field
+     is non-empty, a full-width "🤖 Search with AI" button appears in place of
+     the table. Clicking calls the AI, then opens the create modal pre-filled.
+  2. Modal button: a compact "🤖 AI" button sits next to the Name field.
+     User types a name → clicks the button → macros are filled automatically.
+  In both cases the result is shown in an editable form for review before saving.
 
 ## Claude AI — Macronutrient Lookup
 When an ingredient is not found in the database, the user can trigger an
 AI-assisted lookup powered by the Anthropic API.
 
-  Model  : claude-haiku-3-5
+  Model  : configurable via ANTHROPIC_MODEL env var
+           default = claude-3-haiku-20240307 (broadly available)
+           override in .env: ANTHROPIC_MODEL=claude-3-5-haiku-20241022
   Config : ANTHROPIC_API_KEY from .env (never committed to git)
 
   Flow:
@@ -149,7 +160,7 @@ per-slot macro targets. Configured via DietPlanner Settings (Configuration menu)
 - Weight and body fat % log (per day)
 - Weekly auto-recalculation of plan based on weight/fat trend
 - Grocery list auto-generated from weekly plan + manually editable
-- AI-assisted macronutrient lookup via Anthropic API (claude-haiku-3-5)
+- AI-assisted macronutrient lookup via Anthropic API (model configurable via ANTHROPIC_MODEL)
 
 ## Data Model (summary)
 - Profile
@@ -202,8 +213,8 @@ Swagger UI: `http://localhost:8000/docs`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/`          | List all profiles |
-| POST   | `/`          | Create profile → 201 |
+| GET    |              | List all profiles |
+| POST   |              | Create profile → 201 |
 | GET    | `/{id}`      | Get profile by ID |
 | PUT    | `/{id}`      | Update profile (full replace) |
 | DELETE | `/{id}`      | Delete profile + cascade |
@@ -224,8 +235,8 @@ Swagger UI: `http://localhost:8000/docs`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/`          | List (query: `search=`, `month=`) |
-| POST   | `/`          | Create ingredient → 201 |
+| GET    |              | List (query: `search=`, `month=`) |
+| POST   |              | Create ingredient → 201 |
 | GET    | `/{id}`      | Get ingredient |
 | PUT    | `/{id}`      | Update ingredient (full replace) |
 | DELETE | `/{id}`      | Delete ingredient |
@@ -243,8 +254,8 @@ Swagger UI: `http://localhost:8000/docs`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/`                                  | List (query: `dish_type=`, `slot=`, `profile_id=`) |
-| POST   | `/`                                  | Create dish + optional ingredients → 201 |
+| GET    |                                      | List (query: `dish_type=`, `slot=`, `profile_id=`) |
+| POST   |                                      | Create dish + optional ingredients → 201 |
 | GET    | `/{id}`                              | Get dish with ingredient list |
 | PUT    | `/{id}`                              | Update dish metadata (ingredients unchanged) |
 | DELETE | `/{id}`                              | Delete dish + DishIngredients (cascade) |
@@ -265,8 +276,8 @@ Swagger UI: `http://localhost:8000/docs`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/`          | List plans for a profile (query: `profile_id=` required) |
-| POST   | `/`          | Create empty plan → 201 |
+| GET    |              | List plans for a profile (query: `profile_id=` required) |
+| POST   |              | Create empty plan → 201 |
 | GET    | `/{id}`      | Get full plan (7 days × 5 slots, nested dishes) |
 | DELETE | `/{id}`      | Delete plan + cascade (DailyPlans, Meals, GroceryList) |
 | POST   | `/generate`  | Auto-generate weekly plan + GroceryList → 201 |
@@ -283,8 +294,8 @@ Swagger UI: `http://localhost:8000/docs`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/`     | List entries (query: `profile_id=` required, `from=`, `to=`) |
-| POST   | `/`     | Add weigh-in entry → 201 |
+| GET    |         | List entries (query: `profile_id=` required, `from=`, `to=`) |
+| POST   |         | Add weigh-in entry → 201 |
 | DELETE | `/{id}` | Delete entry |
 
 **Constraints:**
