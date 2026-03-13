@@ -147,9 +147,15 @@ macro targets. Configured via DietPlanner Settings (Configuration menu).
 
       Step 4 — Random selection
         Pick randomly from filtered list
-        Calculate total macronutrients of selected dish
+        Calculate total macronutrients of selected dish at portion_scale = 1.0
 
-      Step 5 — Compare to global macro target from ProfileGoal
+      Step 4b — Scale portion to hit slot kcal target
+        slot_kcal_target = kcal_target × meal_dist_{slot}_pct / 100
+        portion_scale = slot_kcal_target / dish_kcal_at_scale_1
+        Recompute macros at new portion_scale
+        (kcal_target = BMR × activity_factor ± goal offset, computed inline)
+
+      Step 5 — Compare macro % to global target from ProfileGoal
         target = { macro_carbs_pct, macro_proteins_pct, macro_fats_pct }
                  from ProfileGoal — same target applied to every slot
 
@@ -193,7 +199,7 @@ macro targets. Configured via DietPlanner Settings (Configuration menu).
 ## Features
 - Multi-profile: each profile has own goals, weight, body fat %
 - N configurable meals per day (set in Configuration → User Profiles)
-- Per-slot Kcal % distribution + global macro % (set in Configuration → User Profiles)
+- Per-slot Kcal % distribution (used by generator to scale portions) + global macro % (set in Configuration → User Profiles)
 - Auto weekly meal plan generator with macro rebalancing algorithm
 - Weight and body fat % log (per day)
 - Weekly auto-recalculation of plan based on weight/fat trend

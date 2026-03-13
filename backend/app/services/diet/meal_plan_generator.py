@@ -4,9 +4,11 @@ Algorithm (from DietPlanner SKILL.md):
   For each day (Mon→Sun) × each slot (breakfast…dinner):
     1. Filter Primary dishes matching slot + day_preferences
     2. Exclude dishes used >= max_per_week times already
-    3. Random select → compute macros
-    4. Compare to global macro target (macro_carbs_pct / macro_proteins_pct / macro_fats_pct)
-       — same target applied to every slot (derived from ProfileGoal overall daily macros)
+    3. Random select → compute macros at portion_scale = 1.0
+    4. Scale portion to hit slot kcal target
+       slot_kcal_target = kcal_target × meal_dist_{slot}_pct / 100
+       (kcal_target derived from profile BMR × activity_factor ± goal offset)
+    5. Compare macro % to global target (same for every slot)
     5a. variable_portions=False → add Secondary/Side with dominant macro gap
         → rebalance primary portion size (scale total grams, NOT ingredient ratios)
         → iterate up to N times
@@ -27,9 +29,19 @@ from app.models.diet import (
     GroceryList, Ingredient, Meal, MealPlan,
     Profile, ProfileGoal,
 )
+from app.services.diet.kcal import compute_goal_preview
 
 SLOTS = ["breakfast", "morning_snack", "lunch", "afternoon_snack", "dinner"]
 DAYS  = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+# Maps slot name → ProfileGoal field holding the % of daily kcal for that slot
+SLOT_DIST_FIELDS = {
+    "breakfast":       "meal_dist_breakfast_pct",
+    "morning_snack":   "meal_dist_morning_snack_pct",
+    "lunch":           "meal_dist_lunch_pct",
+    "afternoon_snack": "meal_dist_afternoon_snack_pct",
+    "dinner":          "meal_dist_dinner_pct",
+}
 
 # Default max iterations if DietPlanner Settings not yet implemented
 DEFAULT_N = 3
@@ -110,7 +122,17 @@ def generate_weekly_plan(
             "Go to Configuration → User Profiles → Configure Goal before generating a plan."
         )
 
-    # Build slot→target dict — use global daily macro % for every slot
+    # Compute daily kcal target from profile BMR / TDEE / goal offset
+    preview = compute_goal_preview(profile, goal)
+    kcal_target: float = preview["kcal_target"]
+
+    # Build per-slot kcal targets  (e.g. lunch = 1800 × 0.40 = 720 kcal)
+    slot_kcal_targets: dict[str, float] = {
+        slot: kcal_target * getattr(goal, SLOT_DIST_FIELDS[slot]) / 100
+        for slot in SLOTS
+    }
+
+    # Build macro ratio target — same for every slot
     _global_target = SimpleNamespace(
         macro_carbs_pct=goal.macro_carbs_pct,
         macro_proteins_pct=goal.macro_proteins_pct,
@@ -136,7 +158,8 @@ def generate_weekly_plan(
         for slot in SLOTS:
             meal = _fill_slot(
                 db, daily_plan, slot, day_name,
-                slot_targets, usage_count, profile_id, N,
+                slot_targets, slot_kcal_targets[slot],
+                usage_count, profile_id, N,
             )
             db.add(meal)
 
@@ -156,11 +179,12 @@ def _fill_slot(
     slot: str,
     day_name: str,
     slot_targets: dict,
+    slot_kcal_target: float,
     usage_count: dict,
     profile_id: int,
     N: int,
 ) -> Meal:
-    target: ProfileGoalDist | None = slot_targets.get(slot)
+    target = slot_targets.get(slot)
 
     # Step 1 — Filter Primary dishes for this slot
     primary_dishes: list[Dish] = (
@@ -193,7 +217,13 @@ def _fill_slot(
     portion_scale = 1.0
     macros = _compute_dish_macros(selected, portion_scale)
 
-    # Step 5 — Compare to target and rebalance
+    # Step 4b — Scale portion to hit slot kcal target
+    # (e.g. if dish has 500 kcal at scale=1 and target is 720 kcal → scale=1.44)
+    if slot_kcal_target > 0 and macros["kcal"] > 0:
+        portion_scale = slot_kcal_target / macros["kcal"]
+        macros = _compute_dish_macros(selected, portion_scale)
+
+    # Step 5 — Compare macro % to target and rebalance
     if target:
         actual_pct = _macro_pct(macros)
         for _ in range(N):
@@ -207,16 +237,15 @@ def _fill_slot(
 
             if selected.variable_portions:
                 # 5b — scale ingredient quantities to hit target (simple scaling)
-                target_kcal = macros["kcal"]
                 target_macro_pct = {
                     "carbs_g":    target.macro_carbs_pct,
                     "proteins_g": target.macro_proteins_pct,
                     "fats_g":     target.macro_fats_pct,
                 }
-                desired_kcal_from_gap = target_macro_pct[gap_macro]
-                current_kcal_from_gap = actual_pct.get(gap_macro.replace("_g", "_pct"), 0)
-                if current_kcal_from_gap > 0:
-                    portion_scale *= (desired_kcal_from_gap / current_kcal_from_gap)
+                desired_pct = target_macro_pct[gap_macro]
+                current_pct = actual_pct.get(gap_macro.replace("_g", "_pct"), 0)
+                if current_pct > 0:
+                    portion_scale *= (desired_pct / current_pct)
                     macros = _compute_dish_macros(selected, portion_scale)
                     actual_pct = _macro_pct(macros)
             else:
