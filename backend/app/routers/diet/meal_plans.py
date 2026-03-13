@@ -105,5 +105,8 @@ def generate_plan(data: GeneratePlanRequest, db: Session = Depends(get_db)):
 
     Returns the complete MealPlan with all nested data.
     """
-    plan = generate_weekly_plan(db, data.profile_id, data.week_start_date)
+    try:
+        plan = generate_weekly_plan(db, data.profile_id, data.week_start_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     return plan

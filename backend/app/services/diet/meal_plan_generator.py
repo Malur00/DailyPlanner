@@ -103,7 +103,10 @@ def generate_weekly_plan(
 
     goal: ProfileGoal = profile.goal_config
     if not goal:
-        raise ValueError(f"Profile {profile_id} has no goal configured")
+        raise ValueError(
+            f"Profile \"{profile.name}\" has no goal configured. "
+            "Go to Configuration → User Profiles → Configure Goal before generating a plan."
+        )
 
     # Build slot→target dict
     slot_targets: dict[str, ProfileGoalDist] = {
